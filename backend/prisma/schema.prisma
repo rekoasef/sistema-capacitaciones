@@ -1,0 +1,68 @@
+// backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Capacitacion {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique
+  descripcion String
+  instructor  String
+  modalidad   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  grupos      Grupo[]
+}
+
+model Grupo {
+  id            Int           @id @default(autoincrement())
+  fechaInicio   DateTime
+  fechaFin      DateTime
+  cupoMaximo    Int
+  capacitacion  Capacitacion  @relation(fields: [capacitacionId], references: [id])
+  capacitacionId Int
+  inscripciones Inscripcion[]
+}
+
+// --- NUEVA TABLA ---
+// Tabla para almacenar la lista oficial de concesionarios
+model Concesionario {
+  id            Int      @id @default(autoincrement())
+  nombre        String   @unique
+  inscripciones Inscripcion[]
+}
+
+
+// --- TABLA INSCRIPCION ACTUALIZADA ---
+model Inscripcion {
+  id           Int      @id @default(autoincrement())
+  nombreUsuario String
+  emailUsuario String
+  estado       String   @default("PENDIENTE")
+  grupo        Grupo    @relation(fields: [grupoId], references: [id])
+  grupoId      Int
+  createdAt    DateTime @default(now())
+
+  // --- NUEVOS CAMPOS ---
+  telefono              String? // El '?' lo hace opcional
+  informacionAdicional  String? // Opcional también
+
+  // --- NUEVA RELACIÓN ---
+  concesionario         Concesionario @relation(fields: [concesionarioId], references: [id])
+  concesionarioId       Int
+
+  @@unique([emailUsuario, grupoId])
+}
+
+model Admin {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}

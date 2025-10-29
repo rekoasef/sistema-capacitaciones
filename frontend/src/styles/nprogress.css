@@ -1,0 +1,29 @@
+/* frontend/src/styles/nprogress.css */
+
+/* Hacemos la barra principal con el rojo de Crucianelli */
+#nprogress .bar {
+  background: #D80027 !important;
+  position: fixed;
+  z-index: 9999;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px; /* Hacemos la barra un poco más gruesa */
+}
+
+/* El "destello" (spinner) que aparece al final */
+#nprogress .peg {
+  display: block;
+  position: absolute;
+  right: 0px;
+  width: 100px;
+  height: 100%;
+  box-shadow: 0 0 10px #D80027, 0 0 5px #D80027 !important;
+  opacity: 1.0;
+  transform: rotate(3deg) translate(0px, -4px);
+}
+
+/* Ocultamos el spinner circular que viene por defecto, no lo queremos */
+#nprogress .spinner {
+  display: none !important;
+}

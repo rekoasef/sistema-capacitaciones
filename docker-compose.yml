@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:15
+    container_name: capacitaciones_db
+    restart: "no"
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: capacitaciones
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d capacitaciones"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mailhog:
+    image: mailhog/mailhog
+    container_name: capacitaciones_mailhog
+    restart: always
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  backend:
+    container_name: capacitaciones_backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+      - "5555:5555"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/usr/src/app
+      - /usr/src/app/node_modules
+    environment:
+      DATABASE_URL: "postgresql://admin:password123@db:5432/capacitaciones?schema=public"
+      JWT_SECRET: "${JWT_SECRET}"
+
+      # --- ¡AQUÍ ESTÁ EL CAMBIO! ---
+      # Pega tu clave secreta de SendGrid (la que empieza con SG.)
+      SENDGRID_API_KEY: "${SENDGRID_API_KEY} "
+      SENDGRID_FROM_EMAIL: "rasef@crucianelli.com"
+
+    command: npm run start:dev
+
+volumes:
+  postgres_data:
