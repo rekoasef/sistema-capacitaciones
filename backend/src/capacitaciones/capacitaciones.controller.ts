@@ -9,18 +9,17 @@ import {
   Delete,
   UseGuards,
   Res,
+  Patch, // <-- 1. Importar Patch
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CapacitacionesService } from './capacitaciones.service';
 import { CreateCapacitacionDto } from './dto/create-capacitacion.dto';
+import { UpdateCapacitacionDto } from './dto/update-capacitacion.dto'; // <-- 2. Importar DTO
 import type { Response } from 'express';
 
-// Quitamos el guardia de la puerta principal del controlador
 @Controller('capacitaciones')
 export class CapacitacionesController {
   constructor(private readonly capacitacionesService: CapacitacionesService) {}
-
-  // Ponemos guardia SOLO en las rutas que necesitan protección
 
   @Get(':id/exportar/csv')
   @UseGuards(AuthGuard('jwt')) // Protegido
@@ -41,16 +40,30 @@ export class CapacitacionesController {
     return this.capacitacionesService.create(createCapacitacionDto);
   }
 
-  // Esta ruta ahora es PÚBLICA (sin @UseGuards)
   @Get()
   findAll() {
     return this.capacitacionesService.findAll();
   }
 
-  // Esta ruta también es PÚBLICA (para la página de detalle pública)
+  @Get('admin/:id')
+  @UseGuards(AuthGuard('jwt'))
+  findOneForAdmin(@Param('id') id: string) {
+    return this.capacitacionesService.findOneForAdmin(+id);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.capacitacionesService.findOne(+id);
+  }
+
+  // --- ¡NUEVO ENDPOINT DE ACTUALIZACIÓN! ---
+  @Patch(':id')
+  @UseGuards(AuthGuard('jwt')) // Protegido
+  update(
+    @Param('id') id: string,
+    @Body() updateCapacitacionDto: UpdateCapacitacionDto, // <-- 3. Usar el DTO
+  ) {
+    return this.capacitacionesService.update(+id, updateCapacitacionDto);
   }
 
   @Delete(':id')
@@ -60,7 +73,7 @@ export class CapacitacionesController {
   }
 
   @Get(':id/inscriptos')
-  @UseGuards(AuthGuard('jwt')) // Protegido (solo admins ven la lista)
+  @UseGuards(AuthGuard('jwt')) // Protegido
   findInscriptos(@Param('id') id: string) {
     return this.capacitacionesService.findInscriptosByCapacitacion(+id);
   }

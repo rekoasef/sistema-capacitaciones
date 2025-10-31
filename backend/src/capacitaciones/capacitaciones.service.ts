@@ -3,6 +3,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCapacitacionDto } from './dto/create-capacitacion.dto';
+import { UpdateCapacitacionDto } from './dto/update-capacitacion.dto'; // <-- 1. Importar el DTO
 import * as Papa from 'papaparse';
 
 @Injectable()
@@ -35,20 +36,52 @@ export class CapacitacionesService {
     });
   }
 
-  // --- ¡MÉTODO MODIFICADO! ---
   findOne(id: number) {
     return this.prisma.capacitacion.findUnique({
       where: { id },
-      // ¡AQUÍ ESTÁ LA MAGIA!
-      // Le decimos a Prisma que también incluya
-      // todos los grupos relacionados con esta capacitación.
       include: {
         grupos: {
           orderBy: {
-            fechaInicio: 'asc', // Ordenamos los grupos por fecha
+            fechaInicio: 'asc',
           },
         },
       },
+    });
+  }
+
+  async findOneForAdmin(id: number) {
+    const capacitacion = await this.prisma.capacitacion.findUnique({
+      where: { id },
+      include: {
+        grupos: {
+          orderBy: {
+            fechaInicio: 'asc',
+          },
+        },
+      },
+    });
+    
+    if (!capacitacion) {
+      throw new NotFoundException(`La capacitación con ID ${id} no fue encontrada.`);
+    }
+    return capacitacion;
+  }
+
+  // --- ¡NUEVO MÉTODO DE ACTUALIZACIÓN! ---
+  // Este método solo actualiza los datos *propios* de la capacitación.
+  // La gestión de grupos (crear/borrar/editar) se maneja en GruposService.
+  async update(id: number, updateCapacitacionDto: UpdateCapacitacionDto) {
+    // Verificamos si existe primero
+    const capacitacion = await this.prisma.capacitacion.findUnique({
+      where: { id },
+    });
+    if (!capacitacion) {
+      throw new NotFoundException(`La capacitación con ID ${id} no fue encontrada.`);
+    }
+
+    return this.prisma.capacitacion.update({
+      where: { id },
+      data: updateCapacitacionDto,
     });
   }
 
