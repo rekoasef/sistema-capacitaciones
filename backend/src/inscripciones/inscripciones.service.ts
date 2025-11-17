@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateInscripcionDto } from './dto/create-inscripcion.dto';
+import { UpdateInscripcionDto } from './dto/update-inscripcion.dto'; // <-- 1. Importar DTO
 import { MailService } from '../mail/mail.service';
 import * as Papa from 'papaparse';
 
@@ -59,22 +60,51 @@ export class InscripcionesService {
     }
   }
 
-  // --- ¡AQUÍ ESTÁ LA SOLUCIÓN! ---
   findAll() {
     return this.prisma.inscripcion.findMany({
-      // Le decimos a Prisma que incluya los datos de la tabla relacionada
       include: {
         concesionario: true,
       },
       orderBy: {
-        createdAt: 'desc', // Ordenamos por más reciente
+        createdAt: 'desc',
       }
     });
   }
 
-  findOne(id: number) {
-    return this.prisma.inscripcion.findUnique({ where: { id } });
+  async findOne(id: number) {
+    // <-- 2. Añadimos verificación de existencia
+    const inscripcion = await this.prisma.inscripcion.findUnique({
+      where: { id },
+    });
+    if (!inscripcion) {
+      throw new NotFoundException(`La inscripción con ID ${id} no fue encontrada.`);
+    }
+    return inscripcion;
   }
+
+  // --- ¡NUEVO MÉTODO DE ACTUALIZACIÓN! ---
+  async update(id: number, updateInscripcionDto: UpdateInscripcionDto) {
+    // Primero, verificar que la inscripción exista
+    await this.findOne(id);
+    
+    // Luego, actualizar
+    return this.prisma.inscripcion.update({
+      where: { id },
+      data: updateInscripcionDto,
+    });
+  }
+
+  // --- ¡NUEVO MÉTODO DE ELIMINACIÓN! ---
+  async remove(id: number) {
+    // Primero, verificar que la inscripción exista
+    await this.findOne(id);
+
+    // Luego, borrar
+    return this.prisma.inscripcion.delete({
+      where: { id },
+    });
+  }
+
 
   async exportToCsv(): Promise<string> {
     const inscripciones = await this.prisma.inscripcion.findMany({
@@ -96,7 +126,7 @@ export class InscripcionesService {
       Email_Participante: insc.emailUsuario,
       Estado: insc.estado,
       Telefono: insc.telefono || 'N/A',
-      Concesionario: insc.concesionario.nombre, // Ahora esto siempre funcionará
+      Concesionario: insc.concesionario.nombre,
       Info_Adicional: insc.informacionAdicional || 'N/A',
       Capacitacion: insc.grupo.capacitacion.nombre,
       Fecha_Grupo: new Date(insc.grupo.fechaInicio).toLocaleDateString('es-AR'),

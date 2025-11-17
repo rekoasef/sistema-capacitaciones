@@ -1,63 +1,72 @@
 // frontend/src/pages/admin/capacitaciones/index.tsx
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react'; // 1. Importar useCallback
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { FiPlus, FiEye, FiTrash2 } from 'react-icons/fi';
+import { FiPlus, FiEye, FiTrash2, FiEyeOff } from 'react-icons/fi';
 import ConfirmModal from '@/components/ConfirmModal';
 import toast from 'react-hot-toast';
+import { useApi } from '@/hooks/useApi'; // 2. Importar el hook
 
-// ... (Las interfaces se mantienen igual)
-interface Capacitacion { id: number; nombre: string; instructor: string; }
-interface Grupo { id: number; fechaInicio: string; cupoMaximo: number; capacitacionId: number; }
+interface Capacitacion { 
+  id: number; 
+  nombre: string; 
+  instructor: string; 
+  visible: boolean;
+}
+interface Grupo { 
+  id: number; 
+  fechaInicio: string; 
+  cupoMaximo: number; 
+  capacitacionId: number; 
+}
 
 export default function GestionCapacitacionesPage() {
   const [capacitaciones, setCapacitaciones] = useState<Capacitacion[]>([]);
   const [grupos, setGrupos] = useState<Grupo[]>([]);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(''); // Estado de error local
   const router = useRouter();
+  
+  // 3. Usar el hook useApi
+  const { request, loading: apiLoading } = useApi();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [capacitacionIdParaEliminar, setCapacitacionIdParaEliminar] = useState<number | null>(null);
 
-  const fetchData = async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return router.push('/admin/login');
+  // 4. Refactorizar fetchData
+  const fetchData = useCallback(async () => {
+    setError('');
     try {
-      setLoading(true);
-      const [resCap, resGrupos] = await Promise.all([
-        fetch('http://127.0.0.1:3001/capacitaciones', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('http://127.0.0.1:3001/grupos'), 
+      // Usamos Promise.all con el hook para cargar ambos recursos
+      const [dataCap, dataGrupos] = await Promise.all([
+        request<Capacitacion[]>('/capacitaciones/admin/all', { method: 'GET' }),
+        request<Grupo[]>('/grupos', { method: 'GET' }) // El endpoint de grupos es público
       ]);
-      if (resCap.status === 401) return router.push('/admin/login');
-      const dataCap = await resCap.json();
-      const dataGrupos = await resGrupos.json();
-      setCapacitaciones(dataCap);
-      setGrupos(dataGrupos);
-    } catch (err) {
-      setError('No se pudieron cargar los datos.');
-    } finally {
-      setLoading(false);
+      
+      if (dataCap) setCapacitaciones(dataCap);
+      if (dataGrupos) setGrupos(dataGrupos);
+
+    } catch (err: any) {
+      setError(err.message || 'No se pudieron cargar los datos.');
+      toast.error(err.message || 'No se pudieron cargar los datos.');
     }
-  };
+  }, [request]); // Depender de 'request' del hook
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
+  // 5. Refactorizar handleConfirmDelete
   const handleConfirmDelete = async () => {
     if (!capacitacionIdParaEliminar) return;
-    const token = localStorage.getItem('token');
     const toastId = toast.loading('Eliminando capacitación...');
+    
     try {
-      const res = await fetch(`http://127.0.0.1:3001/capacitaciones/${capacitacionIdParaEliminar}`, {
+      await request(`/capacitaciones/${capacitacionIdParaEliminar}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error('No se pudo eliminar la capacitación.');
       toast.success('Capacitación eliminada con éxito.', { id: toastId });
-      fetchData();
+      fetchData(); // Recargar datos
     } catch (err: any) {
       toast.error(err.message, { id: toastId });
     } finally {
@@ -66,12 +75,38 @@ export default function GestionCapacitacionesPage() {
     }
   };
 
+  // 6. Refactorizar handleToggleVisibility
+  const handleToggleVisibility = async (id: number, currentVisibility: boolean) => {
+    const newVisibility = !currentVisibility;
+    const toastId = toast.loading(`Cambiando visibilidad...`);
+
+    try {
+      await request(`/capacitaciones/${id}`, {
+        method: 'PATCH',
+        body: { visible: newVisibility },
+      });
+      
+      toast.success(`Capacitación ${newVisibility ? 'publicada' : 'ocultada'}.`, { id: toastId });
+      
+      // Actualización optimista local
+      setCapacitaciones(prevCaps => 
+        prevCaps.map(cap => 
+          cap.id === id ? { ...cap, visible: newVisibility } : cap
+        )
+      );
+
+    } catch (err: any) {
+      toast.error(err.message, { id: toastId });
+    }
+  };
+
+
   const handleOpenDeleteModal = (id: number) => {
     setCapacitacionIdParaEliminar(id);
     setIsModalOpen(true);
   };
 
-  if (loading) return <div>Cargando...</div>;
+  if (apiLoading && capacitaciones.length === 0) return <div>Cargando...</div>;
   if (error) return <div className="text-red-500">{error}</div>;
 
   return (
@@ -86,15 +121,28 @@ export default function GestionCapacitacionesPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {capacitaciones.map(cap => (
-          // --- TARJETA REFINADA ---
           <div 
             key={cap.id} 
-            className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex flex-col justify-between transition-all duration-300 transform hover:-translate-y-1 hover:shadow-xl"
+            className={`bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex flex-col justify-between transition-all duration-300 transform hover:-translate-y-1 hover:shadow-xl ${
+              !cap.visible ? 'opacity-60' : ''
+            }`}
           >
             {/* Contenido de la Tarjeta */}
             <div>
               <h2 className="text-xl font-bold text-gray-900">{cap.nombre}</h2>
               <p className="text-sm text-gray-500 mt-1">Instructor: {cap.instructor}</p>
+              
+              <div className="mt-2">
+                <span 
+                  className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                    cap.visible 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  {cap.visible ? 'Publicado' : 'Oculto'}
+                </span>
+              </div>
             </div>
             
             {/* Grupos (resumen) */}
@@ -113,18 +161,34 @@ export default function GestionCapacitacionesPage() {
               </ul>
             </div>
             
-            {/* Botones de Acción (Refinados) */}
+            {/* 7. Botones deshabilitados mientras el hook está 'loading' */}
             <div className="mt-6 flex space-x-2">
                <Link 
                   href={`/admin/capacitaciones/${cap.id}`} 
-                  className="flex-1 text-center bg-[#D80027] text-white font-bold py-2 px-4 rounded-lg hover:bg-[#b80021] transition-colors text-sm inline-flex items-center justify-center"
+                  className={`flex-1 text-center bg-[#D80027] text-white font-bold py-2 px-4 rounded-lg hover:bg-[#b80021] transition-colors text-sm inline-flex items-center justify-center ${apiLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  aria-disabled={apiLoading}
+                  onClick={(e) => { if (apiLoading) e.preventDefault(); }} // Prevenir click si está cargando
                 >
                   <FiEye className="mr-2" />
                   Ver Detalles
                 </Link>
               <button
+                onClick={() => handleToggleVisibility(cap.id, cap.visible)}
+                title={cap.visible ? 'Ocultar (Quitar del público)' : 'Publicar (Mostrar al público)'}
+                className={`p-2 rounded-lg transition-colors text-sm ${
+                  cap.visible 
+                    ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' 
+                    : 'bg-green-100 text-green-700 hover:bg-green-200'
+                }`}
+                disabled={apiLoading}
+              >
+                {cap.visible ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+              </button>
+              <button
                 onClick={() => handleOpenDeleteModal(cap.id)}
+                title="Eliminar permanentemente"
                 className="bg-gray-200 text-gray-700 font-semibold p-2 rounded-lg hover:bg-red-100 hover:text-red-700 transition-colors text-sm"
+                disabled={apiLoading}
               >
                 <FiTrash2 size={18} />
               </button>
@@ -133,6 +197,7 @@ export default function GestionCapacitacionesPage() {
         ))}
       </div>
 
+      {/* Modal de Confirmación */}
       <ConfirmModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}

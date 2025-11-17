@@ -1,61 +1,41 @@
-# ===================================================================
-# Este .gitignore unificado maneja tanto el backend como el frontend
-# ===================================================================
+# .gitignore
 
-# General
-# ===================================================================
-# Archivos de sistema operativo
-.DS_Store
-Thumbs.db
-desktop.ini
+# --- Secretos y Entorno ---
+# Ignorar todos los archivos .env
+# .env (local)
+# .env.local (usado por Next.js para variables locales)
+# .env.production (usado en producción)
+# .env.development (usado en desarrollo)
+.env
+.env.*
+!.env.example
 
-# Archivos de logs
-*.log
+# --- Dependencias ---
+# Ignorar node_modules en todas las carpetas (root, backend, frontend)
+**/node_modules
+/node_modules
+
+# --- Logs ---
+# Ignorar logs de npm y yarn
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Archivos de entorno (¡MUY IMPORTANTE!)
-# Ignora todos los archivos .env para no subir llaves secretas
-.env
-.env*
-!*.env.example
+# --- Next.js (Frontend) ---
+# Ignorar carpetas de build y caché de Next.js
+/frontend/.next
+/frontend/out
 
-# Carpetas de dependencias (específicas por proyecto)
-# ===================================================================
-backend/node_modules/
-frontend/node_modules/
+# --- NestJS (Backend) ---
+# Ignorar carpetas de build y caché de NestJS
+/backend/dist
+/backend/.tmp
+/backend/.cache
 
-# Backend (NestJS, Prisma)
-# ===================================================================
-# Carpetas de build y caché de NestJS
-backend/dist/
-backend/.nest*/
-backend/coverage/
+# --- Docker ---
+# Ignorar datos de la base de datos local si se mapea a un volumen
+/data/db
 
-# Archivos de base de datos locales (si se usaran, buena práctica)
-*.sqlite
-*.sqlite-journal
-
-# Frontend (Next.js)
-# ===================================================================
-# Carpetas de build y caché de Next.js
-frontend/.next/
-frontend/out/
-
-# Archivos de build
-frontend/build/
-
-# Archivos de testeo
-frontend/coverage/
-
-# Archivos de configuración local
-frontend/.env.local
-frontend/.env.development.local
-frontend/.env.test.local
-frontend/.env.production.local
-
-# Archivos de IDE
-# ===================================================================
-.vscode/
-.idea/
+# --- Sistema Operativo ---
+.DS_Store
+Thumbs.db

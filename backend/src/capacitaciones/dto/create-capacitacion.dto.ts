@@ -1,6 +1,6 @@
-// src/capacitaciones/dto/create-capacitacion.dto.ts
+// backend/src/capacitaciones/dto/create-capacitacion.dto.ts
 
-import { IsArray, IsOptional, ValidateNested } from 'class-validator';
+import { IsArray, IsOptional, ValidateNested, IsBoolean } from 'class-validator'; // <-- 1. Importar IsBoolean
 import { Type } from 'class-transformer';
 import { CreateGrupoInternoDto } from './create-grupo-interno.dto';
 
@@ -10,10 +10,15 @@ export class CreateCapacitacionDto {
   instructor: string;
   modalidad: string;
 
-  // ¡NUEVA LÓGICA!
+  // --- ¡NUEVO CAMPO! ---
+  @IsBoolean()
+  @IsOptional() // Es opcional, porque en la creación asumimos 'true' por defecto
+  visible?: boolean;
+
+  // ¡LÓGICA EXISTENTE!
   @IsArray()
-  @IsOptional() // Los grupos son opcionales
-  @ValidateNested({ each: true }) // Valida cada objeto del array
-  @Type(() => CreateGrupoInternoDto) // Especifica el tipo de cada objeto
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CreateGrupoInternoDto)
   grupos: CreateGrupoInternoDto[];
 }

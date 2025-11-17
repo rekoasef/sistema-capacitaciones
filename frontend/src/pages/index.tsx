@@ -1,62 +1,76 @@
 // frontend/src/pages/index.tsx
 
 import type { InferGetServerSidePropsType, GetServerSideProps } from 'next';
+import Link from 'next/link';
 import Image from 'next/image';
-import Link from 'next/link'; // Importamos Link para la navegación
+import { FiEye } from 'react-icons/fi';
 
-// --- Las interfaces se mantienen igual ---
+// --- ¡AQUÍ ESTÁ EL CAMBIO! ---
+// 1. Definimos la URL base de la API usando la variable de entorno.
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
+
+// --- Interfaces (se mantienen igual) ---
 interface Capacitacion {
   id: number;
   nombre: string;
   descripcion: string;
   instructor: string;
+  modalidad: string;
 }
-
-// Ya no necesitamos los grupos en esta página, solo las capacitaciones
 type PageProps = {
   capacitaciones: Capacitacion[];
 };
 
 export default function Home({ capacitaciones }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   return (
-    <main className="min-h-screen bg-gray-50 font-sans">
-      <div className="container mx-auto px-4 py-12">
-        {/* --- Encabezado de la Página --- */}
-        <header className="text-center mb-12">
-          <div className="flex justify-center mb-4">
-            <Image 
-                src="/logo.jpg"
-                alt="Logo Crucianelli"
-                width={280}
-                height={60}
-                priority
-            />
-          </div>
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900">Capacitaciones Disponibles</h1>
-          <p className="mt-4 text-lg text-gray-600">Explora nuestra oferta de cursos y regístrate en el que más te interese.</p>
-        </header>
+    <main className="min-h-screen bg-gray-100 p-4 md:p-8 font-sans">
+      <header className="container mx-auto max-w-6xl mb-10 text-center">
+        <Image 
+          src="/logo.jpg"
+          alt="Logo Crucianelli"
+          width={300}
+          height={60}
+          className="mx-auto mb-6"
+          fetchPriority="high"
+          style={{ height: 'auto' }}
+        />
+        <h1 className="text-4xl md:text-5xl font-bold text-gray-800">
+          Portal de Capacitaciones
+        </h1>
+        <p className="mt-2 text-lg text-gray-600">
+          Inscríbete en nuestros próximos cursos y programas de formación.
+        </p>
+      </header>
 
-        {/* --- Galería de Tarjetas (Cards) --- */}
+      <div className="container mx-auto max-w-6xl">
         {capacitaciones.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {capacitaciones.map((cap) => (
-              // En la próxima fase, este Link nos llevará a /capacitaciones/[id]
-              <Link key={cap.id} href={`/capacitaciones/${cap.id}`} className="block bg-white rounded-xl shadow-md hover:shadow-xl transition-shadow duration-300 overflow-hidden group">
-                <div className="p-6">
-                  <h2 className="text-2xl font-bold text-gray-800 group-hover:text-[#D80027] transition-colors">{cap.nombre}</h2>
+              <div 
+                key={cap.id} 
+                className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex flex-col justify-between transition-all duration-300 transform hover:-translate-y-1 hover:shadow-xl"
+              >
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">{cap.nombre}</h2>
                   <p className="text-sm text-gray-500 mt-1">Instructor: {cap.instructor}</p>
-                  <p className="mt-4 text-gray-700 line-clamp-3">{cap.descripcion}</p>
+                  <p className="text-sm text-gray-700 mt-3 line-clamp-3">{cap.descripcion}</p>
                 </div>
-                <div className="bg-gray-50 px-6 py-3">
-                    <span className="text-sm font-semibold text-[#D80027]">Ver detalles e inscribirse &rarr;</span>
+                <div className="mt-6">
+                  <Link 
+                    href={`/capacitaciones/${cap.id}`} 
+                    className="w-full text-center bg-[#D80027] text-white font-bold py-3 px-4 rounded-lg hover:bg-[#b80021] transition-colors inline-flex items-center justify-center"
+                  >
+                    <FiEye className="mr-2" />
+                    Ver Detalles e Inscripción
+                  </Link>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-16">
-            <h2 className="text-2xl font-semibold text-gray-700">No hay capacitaciones disponibles en este momento.</h2>
-            <p className="mt-2 text-gray-500">Por favor, vuelve a consultar más tarde.</p>
+          <div className="text-center bg-white p-10 rounded-xl shadow-md">
+            <h2 className="text-2xl font-semibold text-gray-700">No hay capacitaciones publicadas</h2>
+            <p className="text-gray-500 mt-2">Por favor, vuelve a consultar más tarde.</p>
           </div>
         )}
       </div>
@@ -64,30 +78,22 @@ export default function Home({ capacitaciones }: InferGetServerSidePropsType<typ
   );
 }
 
-// --- getServerSideProps - Ahora solo busca las capacitaciones ---
+// --- getServerSideProps (MODIFICADO) ---
 export const getServerSideProps: GetServerSideProps<PageProps> = async (context) => {
-  context.res.setHeader(
-    'Cache-Control',
-    'no-store, no-cache, must-revalidate, proxy-revalidate'
-  );
-
+  // Evitar caché para que los datos sean siempre frescos
+  context.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  
   try {
-    const resCapacitaciones = await fetch('http://127.0.0.1:3001/capacitaciones');
-    
-    if (!resCapacitaciones.ok) {
-        console.error('Error fetching data from API');
-        return { props: { capacitaciones: [] } };
+    // 2. Usamos la variable API_BASE_URL
+    const res = await fetch(`${API_BASE_URL}/capacitaciones`);
+    if (!res.ok) {
+      throw new Error('No se pudo conectar a la API.');
     }
-
-    const capacitaciones = await resCapacitaciones.json();
-
-    return {
-      props: {
-        capacitaciones,
-      },
-    };
+    const capacitaciones: Capacitacion[] = await res.json();
+    return { props: { capacitaciones } };
   } catch (error) {
-    console.error('Failed to connect to the API:', error);
+    console.error('Error fetching capacitaciones:', error);
+    // Devolvemos un array vacío si la API falla, para que la página no se rompa
     return { props: { capacitaciones: [] } };
   }
 };

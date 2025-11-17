@@ -1,10 +1,10 @@
 // backend/src/capacitaciones/capacitaciones.service.ts
-
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCapacitacionDto } from './dto/create-capacitacion.dto';
-import { UpdateCapacitacionDto } from './dto/update-capacitacion.dto'; // <-- 1. Importar el DTO
+import { UpdateCapacitacionDto } from './dto/update-capacitacion.dto';
 import * as Papa from 'papaparse';
+import { Prisma } from '@prisma/client'; // <-- Asegúrate de que Prisma esté importado
 
 @Injectable()
 export class CapacitacionesService {
@@ -14,7 +14,10 @@ export class CapacitacionesService {
     const { grupos, ...capacitacionData } = createCapacitacionDto;
     return this.prisma.$transaction(async (prisma) => {
       const nuevaCapacitacion = await prisma.capacitacion.create({
-        data: capacitacionData,
+        data: {
+          ...capacitacionData,
+          visible: capacitacionData.visible ?? true, // <-- Asegurarse de que 'visible' esté aquí
+        },
       });
       if (grupos && grupos.length > 0) {
         await prisma.grupo.createMany({
@@ -30,15 +33,28 @@ export class CapacitacionesService {
     });
   }
 
+  // --- PÚBLICO (FILTRADO) ---
   findAll() {
     return this.prisma.capacitacion.findMany({
+      where: { visible: true }, // <-- FILTRO IMPORTANTE
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  findOne(id: number) {
-    return this.prisma.capacitacion.findUnique({
-      where: { id },
+  // --- ¡NUEVO MÉTODO DE ADMIN! ---
+  findAllForAdmin() {
+    return this.prisma.capacitacion.findMany({
+      orderBy: { createdAt: 'desc' }, // Sin filtro 'visible'
+    });
+  }
+
+  // --- PÚBLICO (FILTRADO) ---
+  async findOne(id: number) {
+    const capacitacion = await this.prisma.capacitacion.findUnique({
+      where: {
+        id: id,
+        visible: true, // <-- FILTRO IMPORTANTE
+      },
       include: {
         grupos: {
           orderBy: {
@@ -47,8 +63,16 @@ export class CapacitacionesService {
         },
       },
     });
+
+    if (!capacitacion) {
+      throw new NotFoundException(
+        `Capacitación con ID ${id} no encontrada o no está visible.`,
+      );
+    }
+    return capacitacion;
   }
 
+  // --- ADMIN (SIN FILTRO) ---
   async findOneForAdmin(id: number) {
     const capacitacion = await this.prisma.capacitacion.findUnique({
       where: { id },
@@ -67,21 +91,25 @@ export class CapacitacionesService {
     return capacitacion;
   }
 
-  // --- ¡NUEVO MÉTODO DE ACTUALIZACIÓN! ---
-  // Este método solo actualiza los datos *propios* de la capacitación.
-  // La gestión de grupos (crear/borrar/editar) se maneja en GruposService.
   async update(id: number, updateCapacitacionDto: UpdateCapacitacionDto) {
-    // Verificamos si existe primero
     const capacitacion = await this.prisma.capacitacion.findUnique({
       where: { id },
     });
     if (!capacitacion) {
       throw new NotFoundException(`La capacitación con ID ${id} no fue encontrada.`);
     }
-
+    
+    const dataToUpdate: Prisma.CapacitacionUpdateInput = {
+      ...updateCapacitacionDto,
+    };
+    
+    if (updateCapacitacionDto.visible !== undefined) {
+      dataToUpdate.visible = updateCapacitacionDto.visible;
+    }
+    
     return this.prisma.capacitacion.update({
       where: { id },
-      data: updateCapacitacionDto,
+      data: dataToUpdate,
     });
   }
 
@@ -99,6 +127,7 @@ export class CapacitacionesService {
     });
   }
 
+  // ... (exportCapacitacionToCsv y findInscriptosByCapacitacion se mantienen igual) ...
   async exportCapacitacionToCsv(id: number): Promise<string> {
     const capacitacion = await this.prisma.capacitacion.findUnique({
       where: { id },

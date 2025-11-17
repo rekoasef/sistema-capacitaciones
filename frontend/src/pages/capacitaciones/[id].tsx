@@ -5,7 +5,12 @@ import type { InferGetServerSidePropsType, GetServerSideProps } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import toast from 'react-hot-toast'; // <-- 1. Importamos la librería toast
+import toast from 'react-hot-toast'; 
+
+// --- ¡AQUÍ ESTÁ EL CAMBIO! ---
+// 1. Definimos la URL base de la API usando la variable de entorno.
+//    Esto funcionará tanto en el servidor (getServerSideProps) como en el cliente (handleSubmit).
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
 
 // --- Interfaces (se mantienen igual) ---
 interface Capacitacion { id: number; nombre: string; descripcion: string; instructor: string; }
@@ -20,10 +25,10 @@ export default function CapacitacionDetallePage({ capacitacion, grupos, concesio
     nombreUsuario: '', emailUsuario: '', telefono: '', concesionarioId: '', informacionAdicional: '', grupoId: '',
   });
   
-  // --- 2. Ya no necesitamos 'status' ni 'message' ---
-  const [loading, setLoading] = useState(false); // Mantenemos 'loading' para deshabilitar el botón
+  const [loading, setLoading] = useState(false);
 
   if (!capacitacion) {
+    // ... (Manejo de 404 sin cambios)
     return (
       <main className="min-h-screen bg-gray-100 flex items-center justify-center p-4 font-sans">
         <div className="text-center">
@@ -41,16 +46,16 @@ export default function CapacitacionDetallePage({ capacitacion, grupos, concesio
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // --- 3. handleSubmit totalmente reescrito para usar toasts ---
+  // --- handleSubmit (MODIFICADO) ---
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setLoading(true);
     
-    // Mostramos un toast de "cargando" y guardamos su ID
     const toastId = toast.loading('Inscribiendo...');
 
     try {
-      const response = await fetch('http://127.0.0.1:3001/inscripciones', {
+      // 2. Usamos la variable API_BASE_URL
+      const response = await fetch(`${API_BASE_URL}/inscripciones`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -62,16 +67,13 @@ export default function CapacitacionDetallePage({ capacitacion, grupos, concesio
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Ocurrió un error.');
       
-      // ¡Éxito! Actualizamos el toast a "success"
       toast.success('¡Inscripción exitosa! Gracias por registrarte.', { id: toastId });
       
-      // Redirigimos a la página principal tras el éxito
       setTimeout(() => {
         router.push('/');
-      }, 2000); // Damos 2 segundos para que lea el mensaje
+      }, 2000); 
 
     } catch (error: any) {
-      // ¡Error! Actualizamos el toast a "error"
       toast.error(error.message || 'Error de conexión. Intenta de nuevo.', { id: toastId });
     } finally {
       setLoading(false);
@@ -79,6 +81,7 @@ export default function CapacitacionDetallePage({ capacitacion, grupos, concesio
   };
 
   return (
+    // ... (El JSX del 'return' no cambia en absoluto)
     <main className="min-h-screen bg-gray-50 font-sans">
       <div className="container mx-auto px-4 py-12">
         <header className="mb-12">
@@ -114,16 +117,13 @@ export default function CapacitacionDetallePage({ capacitacion, grupos, concesio
                 <option value="" disabled>-- Selecciona un Grupo --</option>
                 {grupos.map(g => (
                   <option key={g.id} value={g.id} disabled={g.cuposRestantes <= 0}>
-                    {`Grupo del ${new Date(g.fechaInicio).toLocaleDateString()} - Cupos restantes: ${g.cuposRestantes}`}
+                    {`Grupo del ${new Date(g.fechaInicio).toLocaleDateString('es-AR')} - Cupos restantes: ${g.cuposRestantes}`}
                   </option>
                 ))}
               </select>
               <button type="submit" disabled={loading} className="w-full py-3 px-4 text-lg font-medium text-white bg-[#D80027] hover:bg-[#b80021] rounded-lg disabled:bg-gray-400">
                 {loading ? 'Inscribiendo...' : 'Confirmar Inscripción'}
               </button>
-              
-              {/* --- 4. Ya no necesitamos el bloque de 'message' --- */}
-              
             </form>
           </div>
         </div>
@@ -132,15 +132,16 @@ export default function CapacitacionDetallePage({ capacitacion, grupos, concesio
   );
 }
 
-// --- getServerSideProps se mantiene exactamente igual ---
+// --- getServerSideProps (MODIFICADO) ---
 export const getServerSideProps: GetServerSideProps<PageProps> = async (context) => {
   context.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   const { id } = context.params!; 
   try {
+    // 3. Usamos la variable API_BASE_URL
     const [resCap, resGru, resCon] = await Promise.all([
-      fetch(`http://127.0.0.1:3001/capacitaciones/${id}`),
-      fetch('http://127.0.0.1:3001/grupos'),
-      fetch('http://127.0.0.1:3001/concesionarios'),
+      fetch(`${API_BASE_URL}/capacitaciones/${id}`),
+      fetch(`${API_BASE_URL}/grupos`),
+      fetch(`${API_BASE_URL}/concesionarios`),
     ]);
     if (!resCap.ok) { return { props: { capacitacion: null, grupos: [], concesionarios: [] } }; }
     const [capacitacion, todosLosGrupos, concesionarios] = await Promise.all([ resCap.json(), resGru.json(), resCon.json() ]);

@@ -9,12 +9,12 @@ import {
   Delete,
   UseGuards,
   Res,
-  Patch, // <-- 1. Importar Patch
+  Patch,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CapacitacionesService } from './capacitaciones.service';
 import { CreateCapacitacionDto } from './dto/create-capacitacion.dto';
-import { UpdateCapacitacionDto } from './dto/update-capacitacion.dto'; // <-- 2. Importar DTO
+import { UpdateCapacitacionDto } from './dto/update-capacitacion.dto';
 import type { Response } from 'express';
 
 @Controller('capacitaciones')
@@ -22,7 +22,7 @@ export class CapacitacionesController {
   constructor(private readonly capacitacionesService: CapacitacionesService) {}
 
   @Get(':id/exportar/csv')
-  @UseGuards(AuthGuard('jwt')) // Protegido
+  @UseGuards(AuthGuard('jwt'))
   async exportCapacitacionToCsv(
     @Param('id') id: string,
     @Res() res: Response,
@@ -35,14 +35,18 @@ export class CapacitacionesController {
   }
 
   @Post()
-  @UseGuards(AuthGuard('jwt')) // Protegido
+  @UseGuards(AuthGuard('jwt'))
   create(@Body() createCapacitacionDto: CreateCapacitacionDto) {
     return this.capacitacionesService.create(createCapacitacionDto);
   }
 
-  @Get()
-  findAll() {
-    return this.capacitacionesService.findAll();
+  // --- ¡NUEVO ENDPOINT DE ADMIN! ---
+  // Devuelve TODAS las capacitaciones (visibles y ocultas) para el panel de admin.
+  // Debe ir antes de /:id para que 'admin' no sea tomado como un id.
+  @Get('admin/all')
+  @UseGuards(AuthGuard('jwt'))
+  findAllForAdmin() {
+    return this.capacitacionesService.findAllForAdmin();
   }
 
   @Get('admin/:id')
@@ -51,29 +55,35 @@ export class CapacitacionesController {
     return this.capacitacionesService.findOneForAdmin(+id);
   }
 
+  // --- PÚBLICO (FILTRADO) ---
+  @Get()
+  findAll() {
+    return this.capacitacionesService.findAll();
+  }
+
+  // --- PÚBLICO (FILTRADO) ---
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.capacitacionesService.findOne(+id);
   }
 
-  // --- ¡NUEVO ENDPOINT DE ACTUALIZACIÓN! ---
   @Patch(':id')
-  @UseGuards(AuthGuard('jwt')) // Protegido
+  @UseGuards(AuthGuard('jwt'))
   update(
     @Param('id') id: string,
-    @Body() updateCapacitacionDto: UpdateCapacitacionDto, // <-- 3. Usar el DTO
+    @Body() updateCapacitacionDto: UpdateCapacitacionDto,
   ) {
     return this.capacitacionesService.update(+id, updateCapacitacionDto);
   }
 
   @Delete(':id')
-  @UseGuards(AuthGuard('jwt')) // Protegido
+  @UseGuards(AuthGuard('jwt'))
   remove(@Param('id') id: string) {
     return this.capacitacionesService.remove(+id);
   }
 
   @Get(':id/inscriptos')
-  @UseGuards(AuthGuard('jwt')) // Protegido
+  @UseGuards(AuthGuard('jwt'))
   findInscriptos(@Param('id') id: string) {
     return this.capacitacionesService.findInscriptosByCapacitacion(+id);
   }
