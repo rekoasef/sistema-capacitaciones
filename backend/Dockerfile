@@ -1,23 +1,27 @@
 # backend/Dockerfile
 
 # --- 1. ETAPA DE BUILD (Builder) ---
-# Usamos Node 20 (LTS actual) con Debian Slim
 FROM node:20-slim AS builder
 
 WORKDIR /usr/src/app
 
-# Instalamos OpenSSL y certificados (Crucial para Prisma)
+# Instalar OpenSSL (Necesario para Prisma en Debian)
 RUN apt-get update -y && apt-get install -y openssl ca-certificates
 
-COPY package*.json ./
+# Copiamos los archivos de configuración
+COPY package.json ./
 
-# Copiamos prisma antes de instalar
+# --- ¡ESTA ES LA SOLUCIÓN! ---
+# Borramos el package-lock.json para obligar a npm a buscar la versión NUEVA (5.22.0)
+# en lugar de quedarse atascado intentando bajar la vieja (5.15.0).
+RUN rm -f package-lock.json
+
 COPY prisma ./prisma
 
-# Variable para evitar errores de checksum en descargas fallidas
+# Variable para evitar errores de integridad si la red falla un poco
 ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 
-# Instalamos dependencias
+# Instalamos dependencias desde cero
 RUN npm install
 
 COPY . .
@@ -30,17 +34,19 @@ WORKDIR /usr/src/app
 
 ENV NODE_ENV production
 
-# Instalamos OpenSSL también en producción
+# Instalar OpenSSL en producción
 RUN apt-get update -y && apt-get install -y openssl ca-certificates
 
-COPY package*.json ./
+COPY package.json ./
+# Borramos lockfile aquí también por seguridad
+RUN rm -f package-lock.json
 
-# Copiamos archivos necesarios de Prisma
+# Copiamos los archivos de Prisma generados
 COPY --from=builder /usr/src/app/prisma ./prisma
 
 ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 
-# Instalamos solo dependencias de producción
+# Instalación limpia de producción
 RUN npm install --omit=dev
 
 # Copiamos el build
