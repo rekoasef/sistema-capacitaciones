@@ -6,14 +6,17 @@ FROM node:18-alpine AS builder
 WORKDIR /usr/src/app
 
 COPY package*.json ./
+
+# Copiar el schema antes de instalar
 COPY prisma ./prisma
 
 # --- ¡WORKAROUND! ---
 # Ignoramos el error de checksum de Prisma si su servidor falla
 ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 
-# Instalar dependencias (incluyendo devDependencies)
-RUN npm ci
+# --- ¡CAMBIO RADICAL! ---
+# Usamos 'npm install' en lugar de 'npm ci' para evitar errores de lockfile desincronizado
+RUN npm install
 
 COPY . .
 
@@ -37,7 +40,9 @@ COPY --from=builder /usr/src/app/prisma ./prisma
 # --- ¡WORKAROUND! ---
 ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 
-RUN npm ci --omit=dev
+# --- ¡CAMBIO RADICAL! ---
+# Usamos 'npm install' y '--omit=dev'
+RUN npm install --omit=dev
 
 # Copiamos TODO el contenido de dist a dist
 COPY --from=builder /usr/src/app/dist ./dist
