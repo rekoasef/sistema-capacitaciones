@@ -1,53 +1,49 @@
 # backend/Dockerfile
 
 # --- 1. ETAPA DE BUILD (Builder) ---
-# Usamos la imagen 'slim' basada en Debian, más compatible que Alpine
-FROM node:18-slim AS builder
+# Usamos 'bullseye-slim' (Debian 11) que usa OpenSSL 1.1 (más compatible)
+FROM node:18-bullseye-slim AS builder
 
 WORKDIR /usr/src/app
 
-# --- INSTALACIÓN DE DEPENDENCIAS DEL SISTEMA ---
-# Esto es CRÍTICO para que Prisma detecte correctamente OpenSSL 3.0
-# y no intente buscar versiones viejas (1.1.x) que causan errores.
+# Instalamos dependencias básicas y OpenSSL 1.1
 RUN apt-get update -y && apt-get install -y openssl ca-certificates
 
 COPY package*.json ./
 
-# Copiar el schema antes de instalar
+# Copiar el schema
 COPY prisma ./prisma
 
-# --- WORKAROUND ---
+# Workaround para Prisma
 ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 
-# --- INSTALACIÓN NPM ---
-# Al haber fijado la versión en package.json, esto instalará la v5.15.0 estable
+# Instalación de dependencias
 RUN npm install
 
 COPY . .
 RUN npm run build
 
 # --- 2. ETAPA DE PRODUCCIÓN (Runner) ---
-FROM node:18-slim
+FROM node:18-bullseye-slim
 
 WORKDIR /usr/src/app
 
 ENV NODE_ENV production
 
-# Instalar OpenSSL también en producción para que el cliente Prisma funcione al arrancar
+# Instalamos OpenSSL en producción
 RUN apt-get update -y && apt-get install -y openssl ca-certificates
 
 COPY package*.json ./
 
-# Copiar Prisma y dependencias generadas
+# Copiar Prisma y dependencias
 COPY --from=builder /usr/src/app/prisma ./prisma
 
-# --- WORKAROUND ---
 ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 
-# --- INSTALACIÓN PROD ---
+# Instalación de dependencias de producción
 RUN npm install --omit=dev
 
-# Copiamos los artefactos construidos
+# Copiar archivos compilados
 COPY --from=builder /usr/src/app/dist ./dist
 COPY --from=builder /usr/src/app/tsconfig.json ./
 COPY --from=builder /usr/src/app/nest-cli.json ./
