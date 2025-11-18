@@ -5,6 +5,11 @@ FROM node:18-alpine AS builder
 
 WORKDIR /usr/src/app
 
+# --- ¡CORRECCIÓN IMPORTANTE! ---
+# Instalamos OpenSSL aquí también, porque 'npm install' ejecuta 'prisma generate'
+# y Prisma necesita OpenSSL para detectar la plataforma y generar el cliente.
+RUN apk add --no-cache openssl
+
 COPY package*.json ./
 
 # Copiar el schema antes de instalar
@@ -19,7 +24,6 @@ ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 RUN npm install
 
 COPY . .
-
 RUN npm run build
 
 # --- 2. ETAPA DE PRODUCCIÓN (Runner) ---
@@ -29,7 +33,7 @@ WORKDIR /usr/src/app
 
 ENV NODE_ENV production
 
-# Instalar OpenSSL (necesario para Prisma en Alpine)
+# Instalar OpenSSL (necesario para Prisma en Alpine en producción)
 RUN apk add --no-cache openssl
 
 COPY package*.json ./
