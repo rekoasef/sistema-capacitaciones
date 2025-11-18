@@ -1,23 +1,24 @@
 # backend/Dockerfile
 
 # --- 1. ETAPA DE BUILD (Builder) ---
-# Usamos 'bullseye-slim' (Debian 11) que usa OpenSSL 1.1 (más compatible)
+# Usamos 'bullseye-slim' (Debian 11) que usa OpenSSL 1.1
+# Esto evita el error 500 del servidor de Prisma con la versión 3.0
 FROM node:18-bullseye-slim AS builder
 
 WORKDIR /usr/src/app
 
-# Instalamos dependencias básicas y OpenSSL 1.1
+# Instalamos las dependencias de sistema necesarias
 RUN apt-get update -y && apt-get install -y openssl ca-certificates
 
 COPY package*.json ./
 
-# Copiar el schema
+# Copiar el schema antes de instalar
 COPY prisma ./prisma
 
-# Workaround para Prisma
+# Workaround para ignorar chequeos de integridad fallidos
 ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 
-# Instalación de dependencias
+# Instalación de paquetes
 RUN npm install
 
 COPY . .
@@ -30,7 +31,7 @@ WORKDIR /usr/src/app
 
 ENV NODE_ENV production
 
-# Instalamos OpenSSL en producción
+# Instalar OpenSSL en producción
 RUN apt-get update -y && apt-get install -y openssl ca-certificates
 
 COPY package*.json ./
@@ -38,6 +39,7 @@ COPY package*.json ./
 # Copiar Prisma y dependencias
 COPY --from=builder /usr/src/app/prisma ./prisma
 
+# Workaround
 ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 
 # Instalación de dependencias de producción
