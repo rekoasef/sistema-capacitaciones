@@ -8,6 +8,11 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 COPY prisma ./prisma
 
+# --- ¡WORKAROUND! ---
+# Ignoramos el error de checksum de Prisma si su servidor falla
+ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
+
+# Instalar dependencias (incluyendo devDependencies)
 RUN npm ci
 
 COPY . .
@@ -28,17 +33,17 @@ COPY package*.json ./
 
 # Copiar Prisma y dependencias
 COPY --from=builder /usr/src/app/prisma ./prisma
+
+# --- ¡WORKAROUND! ---
+ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
+
 RUN npm ci --omit=dev
 
-# --- ¡AQUÍ ESTÁ EL CAMBIO CLAVE! ---
 # Copiamos TODO el contenido de dist a dist
 COPY --from=builder /usr/src/app/dist ./dist
-
-# Copiamos también los archivos de configuración por si acaso
 COPY --from=builder /usr/src/app/tsconfig.json ./
 COPY --from=builder /usr/src/app/nest-cli.json ./
 
 EXPOSE 3001
 
-# Usamos el comando estándar
 CMD ["npm", "run", "start:prod"]
