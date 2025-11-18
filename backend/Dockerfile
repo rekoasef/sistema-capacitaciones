@@ -6,11 +6,8 @@ FROM node:18-alpine AS builder
 WORKDIR /usr/src/app
 
 COPY package*.json ./
-
-# Copiar el schema antes de instalar
 COPY prisma ./prisma
 
-# Instalar dependencias
 RUN npm ci
 
 COPY . .
@@ -24,20 +21,24 @@ WORKDIR /usr/src/app
 
 ENV NODE_ENV production
 
-# --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
-# Instalamos OpenSSL necesario para que Prisma funcione en Alpine Linux
+# Instalar OpenSSL (necesario para Prisma en Alpine)
 RUN apk add --no-cache openssl
 
 COPY package*.json ./
 
-# Copiamos prisma antes de instalar para el postinstall
+# Copiar Prisma y dependencias
 COPY --from=builder /usr/src/app/prisma ./prisma
-
-# Instalar dependencias de producción
 RUN npm ci --omit=dev
 
+# --- ¡AQUÍ ESTÁ EL CAMBIO CLAVE! ---
+# Copiamos TODO el contenido de dist a dist
 COPY --from=builder /usr/src/app/dist ./dist
+
+# Copiamos también los archivos de configuración por si acaso
+COPY --from=builder /usr/src/app/tsconfig.json ./
+COPY --from=builder /usr/src/app/nest-cli.json ./
 
 EXPOSE 3001
 
+# Usamos el comando estándar
 CMD ["npm", "run", "start:prod"]
