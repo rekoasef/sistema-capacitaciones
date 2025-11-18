@@ -5,7 +5,6 @@ import nookies from 'nookies';
 import { FiUsers, FiFileText, FiCheckSquare } from 'react-icons/fi';
 import Link from 'next/link';
 
-// --- ¡AQUÍ ESTÁ EL CAMBIO! ---
 // 1. Definimos la URL base de la API usando la variable de entorno.
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
 
@@ -97,7 +96,7 @@ export default function Dashboard({ stats, error }: InferGetServerSidePropsType<
   );
 }
 
-// --- getServerSideProps (MODIFICADO) ---
+// --- getServerSideProps (MODIFICADO Y CORREGIDO) ---
 export const getServerSideProps: GetServerSideProps<PageProps> = async (context) => {
   const cookies = nookies.get(context);
   const token = cookies.token;
@@ -107,7 +106,8 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (context)
 
   try {
     // 2. Usamos la variable API_BASE_URL
-    const res = await fetch(`${API_BASE_URL}/dashboard/stats`, {
+    // CORRECCIÓN: Quitamos "/stats" porque el endpoint en el backend es GET /dashboard
+    const res = await fetch(`${API_BASE_URL}/dashboard`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     
