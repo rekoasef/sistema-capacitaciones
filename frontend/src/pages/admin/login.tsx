@@ -4,9 +4,8 @@ import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
+import nookies from 'nookies'; // <-- 1. IMPORTAR NOOKIES
 
-// --- ¡AQUÍ ESTÁ EL CAMBIO! ---
-// 1. Definimos la URL base de la API usando la variable de entorno.
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
 
 export default function LoginPage() {
@@ -16,7 +15,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  // --- handleSubmit (MODIFICADO) ---
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setLoading(true);
@@ -24,7 +22,6 @@ export default function LoginPage() {
     const toastId = toast.loading('Iniciando sesión...');
 
     try {
-      // 2. Usamos la variable API_BASE_URL
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -34,7 +31,16 @@ export default function LoginPage() {
       if (!response.ok) {
         throw new Error(data.message || 'Error de autenticación');
       }
+
+      // 1. Guardar en LocalStorage (para uso del cliente)
       localStorage.setItem('token', data.access_token);
+
+      // --- 2. ¡AQUÍ ESTÁ EL FIX! Guardar en Cookie (para uso del servidor/SSR) ---
+      nookies.set(null, 'token', data.access_token, {
+        maxAge: 30 * 24 * 60 * 60,
+        path: '/',
+      });
+
       toast.success('¡Bienvenido!', { id: toastId });
       router.push('/admin/dashboard');
     } catch (err: any) {
@@ -49,14 +55,13 @@ export default function LoginPage() {
     <main className="min-h-screen bg-gray-100 flex items-center justify-center p-4 font-sans">
       <div className="w-full max-w-md p-10 bg-white rounded-2xl shadow-xl">
         <div className="flex justify-center">
-          {/* Ya corregimos fetchPriority y style en la Fase 13.1.1 */}
           <Image
             src="/logo.jpg"
             alt="Logo Crucianelli"
             width={250}
             height={50}
             className="mb-8"
-            fetchPriority="high" 
+            fetchPriority="high"
             style={{ height: 'auto' }} 
           />
         </div>
