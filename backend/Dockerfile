@@ -7,16 +7,14 @@ WORKDIR /usr/src/app
 
 COPY package*.json ./
 
-# Copiar el schema de Prisma ANTES de instalar
+# Copiar el schema antes de instalar
 COPY prisma ./prisma
 
-# Instalar dependencias (incluyendo devDependencies)
+# Instalar dependencias
 RUN npm ci
 
-# Copiar el resto del código fuente
 COPY . .
 
-# Compilar la aplicación (TypeScript a JavaScript)
 RUN npm run build
 
 # --- 2. ETAPA DE PRODUCCIÓN (Runner) ---
@@ -26,22 +24,20 @@ WORKDIR /usr/src/app
 
 ENV NODE_ENV production
 
-# Copiar los package.json y package-lock.json de producción
+# --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
+# Instalamos OpenSSL necesario para que Prisma funcione en Alpine Linux
+RUN apk add --no-cache openssl
+
 COPY package*.json ./
 
-# --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
-# 1. Copiar el schema de Prisma (necesario para 'prisma generate')
+# Copiamos prisma antes de instalar para el postinstall
 COPY --from=builder /usr/src/app/prisma ./prisma
 
-# 2. Instalar SOLAMENTE las dependencias de producción
-# El 'postinstall' (prisma generate) ahora funcionará
+# Instalar dependencias de producción
 RUN npm ci --omit=dev
 
-# 3. Copiar la build (JS compilado) de la etapa 'builder'
 COPY --from=builder /usr/src/app/dist ./dist
 
-# Exponer el puerto
 EXPOSE 3001
 
-# El comando por defecto (que Render anulará con 'start:prod:migrate')
 CMD ["npm", "run", "start:prod"]

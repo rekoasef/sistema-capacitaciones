@@ -2,6 +2,10 @@
 
 generator client {
   provider = "prisma-client-js"
+  // --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
+  // "native": para que funcione en tu PC.
+  // "linux-musl-openssl-3.0.x": para que funcione en el Docker (Alpine) de Render.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
