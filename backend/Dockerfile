@@ -1,10 +1,13 @@
-# backend/Dockerfile (Opción 1: Slim)
+# backend/Dockerfile (Opción 2: Alpine + OpenSSL)
 
 # --- 1. ETAPA DE BUILD (Builder) ---
-# Usamos 'slim' que ya incluye librerías como OpenSSL
-FROM node:18-slim AS builder
+FROM node:18-alpine AS builder
 
 WORKDIR /usr/src/app
+
+# --- ¡INSTALACIÓN MANUAL DE OPENSSL! ---
+# Necesario para que 'prisma generate' funcione durante el 'npm install'
+RUN apk add --no-cache openssl
 
 COPY package*.json ./
 
@@ -21,13 +24,15 @@ COPY . .
 RUN npm run build
 
 # --- 2. ETAPA DE PRODUCCIÓN (Runner) ---
-FROM node:18-slim
+FROM node:18-alpine
 
 WORKDIR /usr/src/app
 
 ENV NODE_ENV production
 
-# No necesitamos instalar OpenSSL manualmente aquí
+# --- ¡INSTALACIÓN MANUAL DE OPENSSL! ---
+# Necesario para que Prisma funcione en tiempo de ejecución
+RUN apk add --no-cache openssl
 
 COPY package*.json ./
 
