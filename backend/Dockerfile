@@ -1,13 +1,15 @@
-# backend/Dockerfile (Opción 2: Alpine + OpenSSL)
+# backend/Dockerfile
 
 # --- 1. ETAPA DE BUILD (Builder) ---
-FROM node:18-alpine AS builder
+# Usamos 'slim' (Debian) que es más compatible que Alpine
+FROM node:18-slim AS builder
 
 WORKDIR /usr/src/app
 
-# --- ¡INSTALACIÓN MANUAL DE OPENSSL! ---
-# Necesario para que 'prisma generate' funcione durante el 'npm install'
-RUN apk add --no-cache openssl
+# --- ¡CORRECCIÓN CRÍTICA! ---
+# Actualizamos los repositorios e instalamos OpenSSL y certificados.
+# Esto permite que Prisma detecte "openssl-3.0.x" correctamente y no falle intentando bajar la 1.1.x.
+RUN apt-get update -y && apt-get install -y openssl ca-certificates
 
 COPY package*.json ./
 
@@ -24,15 +26,14 @@ COPY . .
 RUN npm run build
 
 # --- 2. ETAPA DE PRODUCCIÓN (Runner) ---
-FROM node:18-alpine
+FROM node:18-slim
 
 WORKDIR /usr/src/app
 
 ENV NODE_ENV production
 
-# --- ¡INSTALACIÓN MANUAL DE OPENSSL! ---
-# Necesario para que Prisma funcione en tiempo de ejecución
-RUN apk add --no-cache openssl
+# Instalar OpenSSL en producción también para que el cliente de Prisma funcione al ejecutarse
+RUN apt-get update -y && apt-get install -y openssl ca-certificates
 
 COPY package*.json ./
 
