@@ -1,29 +1,34 @@
 // backend/src/app.module.ts
 
 import { Module } from '@nestjs/common';
-// Se fue el ConfigModule
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { CapacitacionesModule } from './capacitaciones/capacitaciones.module';
-import { GruposModule } from './grupos/grupos.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { AuthModule } from './auth/auth.module';
+import { ConfigModule } from '@nestjs/config';
+
+import { CapacitacionesModule } from './capacitaciones/capacitaciones.module';
+import { ConcesionariosModule } from './concesionarios/concesionarios.module';
 import { InscripcionesModule } from './inscripciones/inscripciones.module';
 import { MailModule } from './mail/mail.module';
-import { AuthModule } from './auth/auth.module';
 import { DashboardModule } from './dashboard/dashboard.module';
-import { ConcesionariosModule } from './concesionarios/concesionarios.module';
-
+import { GruposModule } from './grupos/grupos.module';
+    
 @Module({
   imports: [
-    // Ya no está ConfigModule.forRoot()
-    CapacitacionesModule,
-    GruposModule,
+    // --- CORRECCIÓN DEFINITIVA: Se especifica la ruta al archivo .env ---
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '../.env', // <-- APUNTA AL ARCHIVO EN LA RAÍZ DEL PROYECTO
+    }),
     PrismaModule,
+    AuthModule,
+    CapacitacionesModule,
+    ConcesionariosModule,
     InscripcionesModule,
     MailModule,
-    AuthModule,
     DashboardModule,
-    ConcesionariosModule,
+    GruposModule,
   ],
   controllers: [AppController],
   providers: [AppService],

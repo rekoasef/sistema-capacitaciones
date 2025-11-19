@@ -4,13 +4,14 @@ import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
-import nookies from 'nookies'; // <-- 1. IMPORTAR NOOKIES
+import nookies from 'nookies'; 
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
+// --- SOLUCIÓN DEFINITIVA: La URL ahora incluye el prefijo /api ---
+const API_BASE_URL = 'http://127.0.0.1:3002/api'; // <-- AÑADIDO /api
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('posventa@crucianelli.com'); 
+  const [password, setPassword] = useState('Pos2020ventas'); 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -22,6 +23,7 @@ export default function LoginPage() {
     const toastId = toast.loading('Iniciando sesión...');
 
     try {
+      // La llamada es ahora a http://127.0.0.1:3002/api/auth/login
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -32,10 +34,7 @@ export default function LoginPage() {
         throw new Error(data.message || 'Error de autenticación');
       }
 
-      // 1. Guardar en LocalStorage (para uso del cliente)
       localStorage.setItem('token', data.access_token);
-
-      // --- 2. ¡AQUÍ ESTÁ EL FIX! Guardar en Cookie (para uso del servidor/SSR) ---
       nookies.set(null, 'token', data.access_token, {
         maxAge: 30 * 24 * 60 * 60,
         path: '/',
@@ -62,7 +61,7 @@ export default function LoginPage() {
             height={50}
             className="mb-8"
             fetchPriority="high"
-            style={{ height: 'auto' }} 
+            style={{ height: 'auto', width: 'auto' }}
           />
         </div>
         <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">

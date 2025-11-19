@@ -7,12 +7,16 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // --- CORRECCIÓN DEFINITIVA DE RUTA: Se añade el prefijo global 'api' ---
+  app.setGlobalPrefix('api'); // <-- RE-AÑADIDO PARA FORZAR ESTABILIDAD DE RUTA
+
   // --- CORRECCIÓN DE CORS ---
-  // Especificamos exactamente qué dominios pueden pedir datos
   app.enableCors({
     origin: [
-      'https://sistema-capacitaciones.vercel.app', // Tu dominio de Producción (Vercel)
-      'http://localhost:3000',                     // Tu entorno Local (para que sigas pudiendo desarrollar)
+      'https://sistema-capacitaciones.vercel.app', 
+      'http://localhost:3000',                     
+      'http://localhost:3001',
+      'http://localhost:3002',
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
@@ -20,7 +24,7 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe());
 
-  // Render asigna un puerto dinámico en la variable PORT, o usa 3000 por defecto
-  await app.listen(process.env.PORT || 3000);
+  // --- CORRECCIÓN DEFINITIVA DE INTERFACES ---
+  await app.listen(process.env.PORT || 3000, '0.0.0.0'); 
 }
 bootstrap();

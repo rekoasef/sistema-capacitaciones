@@ -2,27 +2,25 @@
 version: '3.8'
 
 services:
-  # --- SERVICIO FRONTEND (MODIFICADO PARA PRODUCCIÓN) ---
+  # --- SERVICIO FRONTEND ---
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile # <-- Ahora usamos el Dockerfile que creamos
+      dockerfile: Dockerfile
     ports:
       - "3000:3000"
-    # El 'command: npm run dev' se elimina. Usará el CMD del Dockerfile.
-    # Los 'volumes' se eliminan. El código ya está 'cocinado' en la imagen.
     depends_on:
       - backend
-    # environment:
-      # Si el frontend necesitara variables de entorno en tiempo de ejecución,
-      # se pondrían aquí. (Ej: NEXT_PUBLIC_API_URL=http://tu-dominio.com)
-
-  # --- SERVICIO BACKEND (SIN CAMBIOS) ---
+    environment:
+      # Conexión Docker corregida: usa el nombre del servicio 'backend'
+      NEXT_PUBLIC_API_URL: http://backend:3001 
+      
+  # --- SERVICIO BACKEND (BYPASS DE ARRANQUE) ---
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: npm run start:prod
+    command: npm run start:dev # <-- Mantiene el contenedor abierto para reparación
     ports:
       - "3001:3001"
     depends_on:
@@ -30,12 +28,11 @@ services:
     volumes:
       - ./backend:/usr/src/app
       - /usr/src/app/node_modules
-      - /usr/src/app/dist
     environment:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
-      MAIL_USER: ${MAIL_USER}
-      MAIL_PASS: ${MAIL_PASS}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}
 
   # --- SERVICIO DB (SIN CAMBIOS) ---
   db:

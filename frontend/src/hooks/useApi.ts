@@ -4,11 +4,8 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import toast from 'react-hot-toast';
 
-// --- ¡AQUÍ ESTÁ EL CAMBIO! ---
-// 1. Leemos la variable de entorno.
-// 2. Mantenemos 'http://127.0.0.1:3001' como un fallback (valor por defecto)
-//    para que nuestro entorno 'docker-compose' local siga funcionando sin cambios.
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
+// --- CORRECCIÓN: La URL base ya no incluye /api ---
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3002'; // Puerto 3002
 
 type ApiOptions = Omit<RequestInit, 'body'> & {
   body?: object | string;

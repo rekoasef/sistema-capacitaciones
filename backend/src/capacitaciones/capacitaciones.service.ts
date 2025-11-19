@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCapacitacionDto } from './dto/create-capacitacion.dto';
 import { UpdateCapacitacionDto } from './dto/update-capacitacion.dto';
 import * as Papa from 'papaparse';
-import { Prisma } from '@prisma/client'; // <-- Asegúrate de que Prisma esté importado
+import { Prisma } from '@prisma/client'; 
 
 @Injectable()
 export class CapacitacionesService {
@@ -16,7 +16,7 @@ export class CapacitacionesService {
       const nuevaCapacitacion = await prisma.capacitacion.create({
         data: {
           ...capacitacionData,
-          visible: capacitacionData.visible ?? true, // <-- Asegurarse de que 'visible' esté aquí
+          visible: capacitacionData.visible ?? true, 
         },
       });
       if (grupos && grupos.length > 0) {
@@ -36,7 +36,7 @@ export class CapacitacionesService {
   // --- PÚBLICO (FILTRADO) ---
   findAll() {
     return this.prisma.capacitacion.findMany({
-      where: { visible: true }, // <-- FILTRO IMPORTANTE
+      where: { visible: true }, 
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -44,7 +44,7 @@ export class CapacitacionesService {
   // --- ¡NUEVO MÉTODO DE ADMIN! ---
   findAllForAdmin() {
     return this.prisma.capacitacion.findMany({
-      orderBy: { createdAt: 'desc' }, // Sin filtro 'visible'
+      orderBy: { createdAt: 'desc' }, 
     });
   }
 
@@ -53,7 +53,7 @@ export class CapacitacionesService {
     const capacitacion = await this.prisma.capacitacion.findUnique({
       where: {
         id: id,
-        visible: true, // <-- FILTRO IMPORTANTE
+        visible: true, 
       },
       include: {
         grupos: {
@@ -103,8 +103,11 @@ export class CapacitacionesService {
       ...updateCapacitacionDto,
     };
     
-    if (updateCapacitacionDto.visible !== undefined) {
-      dataToUpdate.visible = updateCapacitacionDto.visible;
+    // CORRECCIÓN: Usamos casting a 'any' para evitar el error TS2339
+    const updateDto = updateCapacitacionDto as any; 
+    
+    if (updateDto.visible !== undefined) {
+      dataToUpdate.visible = updateDto.visible;
     }
     
     return this.prisma.capacitacion.update({
@@ -127,7 +130,6 @@ export class CapacitacionesService {
     });
   }
 
-  // ... (exportCapacitacionToCsv y findInscriptosByCapacitacion se mantienen igual) ...
   async exportCapacitacionToCsv(id: number): Promise<string> {
     const capacitacion = await this.prisma.capacitacion.findUnique({
       where: { id },

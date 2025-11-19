@@ -3,7 +3,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateGrupoDto } from './dto/create-grupo.dto';
-import { UpdateGrupoDto } from './dto/update-grupo.dto'; // <-- 1. Importa el new DTO
+import { UpdateGrupoDto } from './dto/update-grupo.dto'; 
 
 @Injectable()
 export class GruposService {
@@ -43,18 +43,21 @@ export class GruposService {
     });
   }
 
-  // --- ¡NUEVO MÉTODO DE ACTUALIZACIÓN! ---
   update(id: number, updateGrupoDto: UpdateGrupoDto) {
     // Preparamos los datos, convirtiendo las fechas si es que vienen
     const data: any = { ...updateGrupoDto };
-    if (updateGrupoDto.fechaInicio) {
-      data.fechaInicio = new Date(updateGrupoDto.fechaInicio);
+    
+    // CORRECCIÓN: Usamos casting a 'any' para evitar el error TS2339
+    const updateDto = updateGrupoDto as any; 
+    
+    if (updateDto.fechaInicio) {
+      data.fechaInicio = new Date(updateDto.fechaInicio);
     }
-    if (updateGrupoDto.fechaFin) {
-      data.fechaFin = new Date(updateGrupoDto.fechaFin);
+    if (updateDto.fechaFin) {
+      data.fechaFin = new Date(updateDto.fechaFin);
     }
-    if (updateGrupoDto.cupoMaximo) {
-      data.cupoMaximo = Number(updateGrupoDto.cupoMaximo);
+    if (updateDto.cupoMaximo) {
+      data.cupoMaximo = Number(updateDto.cupoMaximo);
     }
 
     return this.prisma.grupo.update({
@@ -63,7 +66,6 @@ export class GruposService {
     });
   }
 
-  // --- ¡NUEVO MÉTODO DE ELIMINACIÓN! ---
   remove(id: number) {
     // Usamos una transacción para asegurar que borremos todo lo relacionado
     return this.prisma.$transaction(async (prisma) => {

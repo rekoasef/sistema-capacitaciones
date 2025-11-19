@@ -37,14 +37,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       <aside className="w-64 bg-white shadow-lg flex flex-col flex-shrink-0 border-r border-gray-200">
         
         <div className="p-4 h-[90px] flex justify-center items-center border-b">
-          {/* --- ¡CÓDIGO CORREGIDO! --- */}
+          {/* --- CORRECCIÓN: 'fetchPriority' con la 'P' mayúscula --- */}
           <Image 
               src="/logo.jpg"
               alt="Logo Crucianelli"
               width={180}
               height={36}
-              fetchPriority="high" // Corregido de 'priority'
-              style={{ height: 'auto' }} // Añadido para mantener el ratio
+              fetchPriority="high" // <-- CORRECCIÓN FINAL
+              style={{ height: 'auto', width: 'auto' }}
           />
         </div>
 
