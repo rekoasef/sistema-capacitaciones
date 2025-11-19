@@ -4,8 +4,8 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import toast from 'react-hot-toast';
 
-// --- CORRECCIÓN: La URL base ya no incluye /api ---
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3002'; // Puerto 3002
+// --- CORREGIDO: La URL base debe ser 3001. ---
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001'; // Puerto 3001
 
 type ApiOptions = Omit<RequestInit, 'body'> & {
   body?: object | string;
@@ -41,8 +41,8 @@ export function useApi() {
       }
 
       try {
-        // Usamos la constante dinámica
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        // CORRECCIÓN: Añadimos el prefijo /api que el backend (NestJS) requiere
+        const response = await fetch(`${API_BASE_URL}/api${endpoint}`, {
           ...options,
           headers,
           body,

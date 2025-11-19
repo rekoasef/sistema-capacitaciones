@@ -106,8 +106,8 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (context)
 
   try {
     // 2. Usamos la variable API_BASE_URL
-    // CORRECCIÓN: Quitamos "/stats" porque el endpoint en el backend es GET /dashboard
-    const res = await fetch(`${API_BASE_URL}/dashboard`, {
+    // CORRECCIÓN FINAL: Añadimos el prefijo /api
+    const res = await fetch(`${API_BASE_URL}/api/dashboard`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     
@@ -116,6 +116,8 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (context)
       return { redirect: { destination: '/admin/login', permanent: false } };
     }
     if (!res.ok) {
+      // Registrar el error para debug en el backend
+      console.error(`Error fetching dashboard: Status ${res.status}`); 
       throw new Error(`Error ${res.status} al cargar estadísticas.`);
     }
     

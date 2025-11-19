@@ -1,4 +1,4 @@
-# docker-compose.yml
+# docker-compose.yml (CORREGIDO)
 version: '3.8'
 
 services:
@@ -15,21 +15,22 @@ services:
       # Conexión Docker corregida: usa el nombre del servicio 'backend'
       NEXT_PUBLIC_API_URL: http://backend:3001 
       
-  # --- SERVICIO BACKEND (BYPASS DE ARRANQUE) ---
+  # --- SERVICIO BACKEND (SOLUCIÓN DEL ERROR 'NEST: NOT FOUND') ---
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: npm run start:dev # <-- Mantiene el contenedor abierto para reparación
+    command: npm run start:dev
     ports:
       - "3001:3001"
     depends_on:
       - db
     volumes:
-      - ./backend:/usr/src/app
-      - /usr/src/app/node_modules
+      # FIX: Solo montamos el código fuente local.
+      # La carpeta node_modules ahora persistirá desde el proceso de BUILD.
+      - ./backend:/usr/src/app 
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
       SENDGRID_API_KEY: ${SENDGRID_API_KEY}
       SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}

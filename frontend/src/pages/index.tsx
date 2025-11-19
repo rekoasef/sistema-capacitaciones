@@ -84,8 +84,8 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (context)
   context.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   
   try {
-    // 2. Usamos la variable API_BASE_URL
-    const res = await fetch(`${API_BASE_URL}/capacitaciones`);
+    // CORRECCIÓN: Usamos la variable API_BASE_URL y añadimos el prefijo /api
+    const res = await fetch(`${API_BASE_URL}/api/capacitaciones`);
     if (!res.ok) {
       throw new Error('No se pudo conectar a la API.');
     }

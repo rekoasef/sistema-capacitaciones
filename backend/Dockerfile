@@ -11,9 +11,7 @@ RUN apt-get update -y && apt-get install -y openssl ca-certificates
 # Copiamos los archivos de configuración
 COPY package.json ./
 
-# --- ¡ESTA ES LA SOLUCIÓN! ---
-# Borramos el package-lock.json para obligar a npm a buscar la versión NUEVA (5.22.0)
-# en lugar de quedarse atascado intentando bajar la vieja (5.15.0).
+# Borramos el package-lock.json para obligar a npm a buscar la versión NUEVA
 RUN rm -f package-lock.json
 
 COPY prisma ./prisma
@@ -37,6 +35,9 @@ ENV NODE_ENV production
 # Instalar OpenSSL en producción
 RUN apt-get update -y && apt-get install -y openssl ca-certificates
 
+# --- FIX CLAVE: Instalar NEST CLI globalmente para que el 'start:dev' funcione ---
+RUN npm install -g @nestjs/cli
+
 COPY package.json ./
 # Borramos lockfile aquí también por seguridad
 RUN rm -f package-lock.json
@@ -46,7 +47,7 @@ COPY --from=builder /usr/src/app/prisma ./prisma
 
 ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 
-# Instalación limpia de producción
+# Instalación limpia de producción (Esto elimina dev dependencies)
 RUN npm install --omit=dev
 
 # Copiamos el build

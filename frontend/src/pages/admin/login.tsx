@@ -6,8 +6,8 @@ import Image from 'next/image';
 import toast from 'react-hot-toast';
 import nookies from 'nookies'; 
 
-// --- SOLUCIÓN DEFINITIVA: La URL ahora incluye el prefijo /api ---
-const API_BASE_URL = 'http://127.0.0.1:3002/api'; // <-- AÑADIDO /api
+// --- CORREGIDO: Usamos el puerto 3001 para la API local. ---
+const API_BASE_URL = 'http://127.0.0.1:3001'; 
 
 export default function LoginPage() {
   const [email, setEmail] = useState('posventa@crucianelli.com'); 
@@ -23,8 +23,8 @@ export default function LoginPage() {
     const toastId = toast.loading('Iniciando sesión...');
 
     try {
-      // La llamada es ahora a http://127.0.0.1:3002/api/auth/login
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      // LLAMADA CORREGIDA: Apunta a http://127.0.0.1:3001/api/auth/login
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

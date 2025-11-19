@@ -7,16 +7,21 @@ import { PrismaModule } from '../../prisma/prisma.module';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './jwt.strategy';
-// Se fueron ConfigModule y ConfigService de las importaciones
+import { ConfigModule, ConfigService } from '@nestjs/config'; // <-- AÑADIDO ConfigModule y ConfigService
 
 @Module({
   imports: [
     PrismaModule,
     PassportModule,
-    // Volvemos al método de registro simple y síncrono
-    JwtModule.register({
-      secret: process.env.JWT_SECRET, // Intentará leer la variable directamente
-      signOptions: { expiresIn: '60m' },
+    // --- FIX: Registro Asíncrono para leer JWT_SECRET de forma confiable ---
+    JwtModule.registerAsync({
+      imports: [ConfigModule], // Importa ConfigModule para que ConfigService esté disponible
+      useFactory: async (configService: ConfigService) => ({
+        // Lee la variable JWT_SECRET de forma asíncrona y robusta
+        secret: configService.get<string>('JWT_SECRET'), 
+        signOptions: { expiresIn: '60m' },
+      }),
+      inject: [ConfigService], // Inyecta ConfigService
     }),
   ],
   controllers: [AuthController],
