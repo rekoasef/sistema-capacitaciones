@@ -154,7 +154,7 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (context)
   const { id } = context.params!; 
   try {
     // 2. Usamos la variable API_BASE_URL
-    const res = await fetch(`${API_BASE_URL}/concesionarios/reporte/${id}`, {
+    const res = await fetch(`${API_BASE_URL}/api/concesionarios/reporte/${id}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) {

@@ -4,11 +4,12 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import toast from 'react-hot-toast';
 
-// --- CORREGIDO: La URL base debe ser 3001. ---
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001'; // Puerto 3001
 
+// CORRECCIÓN: Se añade 'isPublic' como propiedad opcional a ApiOptions.
 type ApiOptions = Omit<RequestInit, 'body'> & {
   body?: object | string;
+  isPublic?: boolean; // <-- ¡Añadido!
 };
 
 export function useApi() {
@@ -21,11 +22,15 @@ export function useApi() {
       setLoading(true);
       setError(null);
       
-      const token = localStorage.getItem('token');
       const headers = new Headers(options.headers || {});
-
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
+      
+      // 1. Lógica para el token.
+      // Solo incluimos el token si NO es una llamada pública.
+      if (!options.isPublic) {
+        const token = localStorage.getItem('token');
+        if (token) {
+          headers.set('Authorization', `Bearer ${token}`);
+        }
       }
 
       let body: string | undefined;
@@ -48,7 +53,7 @@ export function useApi() {
           body,
         });
 
-        if (response.status === 401) {
+        if (response.status === 401 && !options.isPublic) {
           toast.error('Tu sesión ha expirado. Por favor, ingresa de nuevo.');
           localStorage.removeItem('token');
           router.push('/admin/login');

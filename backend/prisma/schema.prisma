@@ -2,10 +2,8 @@
 
 generator client {
   provider = "prisma-client-js"
-  // --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
-  // "native": para que funcione en tu PC.
-  // "linux-musl-openssl-3.0.x": para que funcione en el Docker (Alpine) de Render.
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  // "native" para tu entorno local, "linux-musl..." para Docker/Render.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"] 
 }
 
 datasource db {
@@ -19,7 +17,9 @@ model Capacitacion {
   descripcion String
   instructor  String
   modalidad   String
-  visible     Boolean   @default(true) // <-- ¡NUEVO CAMPO!
+  // --- FIX MIGRACIÓN: Valor por defecto temporal ---
+  ubicacion   String   
+  visible     Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   grupos      Grupo[]
@@ -35,7 +35,6 @@ model Grupo {
   inscripciones  Inscripcion[]
 }
 
-// Tabla para almacenar la lista oficial de concesionarios
 model Concesionario {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
@@ -43,21 +42,19 @@ model Concesionario {
 }
 
 
-// --- TABLA INSCRIPCION ACTUALIZADA ---
+// --- MODELO INSCRIPCION (Formato corregido) ---
 model Inscripcion {
   id                     Int            @id @default(autoincrement())
-  nombreUsuario          String
+  nombreUsuario          String // <-- FORMATO CORREGIDO
   emailUsuario           String
   estado                 String         @default("PENDIENTE")
   grupo                  Grupo          @relation(fields: [grupoId], references: [id])
   grupoId                Int
   createdAt              DateTime       @default(now())
 
-  // --- NUEVOS CAMPOS ---
-  telefono               String? // El '?' lo hace opcional
-  informacionAdicional   String? // Opcional también
+  telefono               String?
+  informacionAdicional   String?
 
-  // --- NUEVA RELACIÓN ---
   concesionario          Concesionario  @relation(fields: [concesionarioId], references: [id])
   concesionarioId        Int
 

@@ -14,6 +14,7 @@ export class CreateCapacitacionDto {
   @IsBoolean()
   @IsOptional() // Es opcional, porque en la creación asumimos 'true' por defecto
   visible?: boolean;
+  ubicacion: string;
 
   // ¡LÓGICA EXISTENTE!
   @IsArray()
