@@ -1,359 +1,228 @@
-// frontend/src/pages/capacitaciones/[id].tsx
+// frontend/src/pages/admin/capacitaciones/[id].tsx
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import Head from 'next/head';
 import Link from 'next/link';
-import { FiCalendar, FiMapPin, FiPhone, FiInfo } from 'react-icons/fi';
+import { FiDownload, FiEdit, FiCalendar, FiUsers, FiEdit2 } from 'react-icons/fi'; 
 import type { InferGetServerSidePropsType, GetServerSideProps } from 'next';
+import nookies from 'nookies';
 import toast from 'react-hot-toast';
-import { useApi } from '@/hooks/useApi';
+import { useApi } from '@/hooks/useApi'; 
 
-// Definimos la URL base de la API
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
 
-// Interfaces
-interface Grupo {
-  id: number;
-  fechaInicio: string;
-  fechaFin: string;
-  cupoMaximo: number;
-  inscripcionesCount: number;
+// --- Interfaces ---
+interface Grupo { 
+  id: number; 
+  fechaInicio: string; 
+  fechaFin: string; 
+  cupoMaximo: number; 
+  inscripcionesCount: number; 
 }
-interface Capacitacion {
-  id: number;
-  nombre: string;
-  descripcion: string;
-  lugar: string;
-  instructor: string;
+
+interface Capacitacion { 
+  id: number; 
+  nombre: string; 
+  instructor: string; 
+  modalidad: string; 
+  ubicacion: string; 
+  grupos: Grupo[]; 
+  visible: boolean;
 }
-interface Concesionario {
-  id: number;
-  nombre: string;
-}
-type PageProps = {
-  capacitacion: Capacitacion | null;
-  grupos: Grupo[];
-  concesionarios: Concesionario[];
-  error?: string;
+
+// TAREA 8.1: Se eliminó el prop inscriptos de PageProps
+type PageProps = { 
+  capacitacion: Capacitacion | null; 
+  error?: string; 
 };
 
-// Componente principal
-export default function DetalleCapacitacionPage({
-  capacitacion,
-  grupos,
-  concesionarios,
-  error: initialError,
-}: InferGetServerSidePropsType<typeof getServerSideProps>) {
+
+// --- HELPER FUNCTION ---
+const formatDateTime = (dateString: string) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    const dateOptions: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' };
+    const timeOptions: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
+    return `${date.toLocaleDateString('es-AR', dateOptions)} ${date.toLocaleTimeString('es-AR', timeOptions)}`;
+};
+
+
+export default function DetalleCapacitacionPage({ capacitacion: initialCapacitacion, error: initialError }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   
+  const [error] = useState(initialError || '');
   const router = useRouter();
-  const { request, loading } = useApi();
-  const [error, setError] = useState(initialError || '');
+  const { id } = router.query;
 
-  // Estado del formulario
-  const [formData, setFormData] = useState({
-    nombreUsuario: '',
-    emailUsuario: '',
-    telefono: '',
-    grupoId: grupos.length > 0 ? grupos[0].id.toString() : '',
-    concesionarioId: '',
-  });
+  const { loading: apiLoading } = useApi();
 
-  if (error) return <div className="p-4 text-red-500 bg-red-100 rounded-lg max-w-4xl mx-auto my-8">{error}</div>;
-  if (!capacitacion) return <div className="p-4 max-w-4xl mx-auto my-8">Cargando o Capacitación no encontrada...</div>;
+  const [capacitacionData, setCapacitacionData] = useState(initialCapacitacion);
 
-  // Manejadores
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
+  useEffect(() => {
+    setCapacitacionData(initialCapacitacion);
+  }, [initialCapacitacion]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const toastId = toast.loading('Procesando inscripción...');
-    setError('');
 
+  // --- handleExport (Exportación global) ---
+  const handleExport = async () => {
+    const token = localStorage.getItem('token'); 
+    if (!token) return router.push('/admin/login');
+    
+    const toastId = toast.loading('Generando CSV de todos los inscritos...');
     try {
-      // Validación básica
-      if (!formData.nombreUsuario || !formData.emailUsuario || !formData.grupoId) {
-        throw new Error('Por favor, complete todos los campos obligatorios.');
-      }
-      
-      const payload = {
-        nombreUsuario: formData.nombreUsuario,
-        emailUsuario: formData.emailUsuario,
-        telefono: formData.telefono,
-        grupoId: parseInt(formData.grupoId),
-        concesionarioId: formData.concesionarioId ? parseInt(formData.concesionarioId) : null,
-      };
-
-      await request(`/inscripciones`, { 
-        method: 'POST', 
-        body: payload, 
-        isPublic: true
-      });
-      
-      toast.success('¡Inscripción exitosa! Recibirás un correo de confirmación.', { id: toastId });
-      // Recargar la página para actualizar el contador de cupos.
-      router.replace(router.asPath);
-
+        const response = await fetch(`${API_BASE_URL}/api/capacitaciones/${id}/exportar/csv`, { 
+            headers: { Authorization: `Bearer ${token}` }
+        });
+         if (response.status === 401) {
+             localStorage.removeItem('token');
+             nookies.destroy(null, 'token', { path: '/' }); 
+             toast.error('Sesión expirada.', { id: toastId });
+             return router.push('/admin/login');
+        }
+        if (!response.ok) throw new Error('Error al exportar');
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `inscriptos_${capacitacionData?.nombre.replace(/\s+/g, '_')}_${id}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        toast.success('Exportación completa.', { id: toastId });
     } catch (err: any) {
-      const message = err.message || 'Error desconocido al inscribirse.';
-      setError(message);
-      toast.error(message, { id: toastId });
+        toast.error(err.message || 'No se pudo generar el archivo CSV.', { id: toastId });
     }
   };
 
 
-  // Renderizado
+  if (error) return <div className="p-4 text-red-500 bg-red-100 rounded-lg">{error}</div>;
+  if (!capacitacionData) return <div className="p-4">Cargando...</div>;
+
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Head>
-        <title>{capacitacion.nombre} - Crucianelli</title>
-      </Head>
-
-      <header className="bg-white shadow-md">
-        <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-            <Link href="/" className="text-xl font-bold text-gray-800 hover:text-blue-600 transition-colors">
-                &larr; Volver al Catálogo
+    <div>
+      {/* --- Header --- */}
+      <div className="flex justify-between items-center mb-8">
+        <div>
+            <Link href="/admin/capacitaciones" className="text-sm text-blue-600 hover:underline mb-2 block">
+            &larr; Volver a Gestión
             </Link>
-            <img src="/logo.jpg" alt="Crucianelli Logo" className="h-10" />
+            <h1 className="text-4xl font-bold text-gray-800">{capacitacionData.nombre}</h1>
+            <p className="text-lg text-gray-600 mt-1">Instructor: {capacitacionData.instructor}</p>
+            <p className="text-md text-gray-600 mt-1">Ubicación: {capacitacionData.ubicacion}</p>
+            <p className="text-sm text-gray-500 mt-1">Estado: {capacitacionData.visible ? 'Público' : 'Oculto'}</p>
         </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-            
-            {/* --- Columna de Detalles --- */}
-            <div className="lg:col-span-2">
-                <h1 className="text-5xl font-extrabold text-gray-900 mb-4">{capacitacion.nombre}</h1>
-                <p className="text-xl text-gray-600 mb-8">{capacitacion.instructor}</p>
-
-                <section className="mb-10 p-6 bg-white rounded-xl shadow-lg border border-gray-100">
-                    <h2 className="text-2xl font-bold text-gray-800 mb-4">Descripción</h2>
-                    <p className="text-gray-700 whitespace-pre-line">{capacitacion.descripcion}</p>
-                </section>
-                
-                <section className="mb-10 p-6 bg-white rounded-xl shadow-lg border border-gray-100">
-                    <h2 className="text-2xl font-bold text-gray-800 mb-4">Detalles Clave</h2>
-                    <div className="space-y-4">
-                        <div className="flex items-start text-gray-700">
-                            <FiMapPin className="w-6 h-6 text-blue-600 mr-3 mt-1 flex-shrink-0" />
-                            <div>
-                                <p className="font-semibold">Lugar:</p>
-                                <p>{capacitacion.lugar}</p>
+        
+        {/* Botones de Acción */}
+        <div className="flex space-x-2">
+            <Link 
+              href={`/admin/capacitaciones/${id}/edit`}
+              className={`bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors flex items-center ${apiLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              aria-disabled={apiLoading}
+              onClick={(e) => { if (apiLoading) e.preventDefault(); }}
+            >
+                <FiEdit className="mr-2" />
+                Editar Capacitación
+            </Link>
+            <button 
+              onClick={handleExport}
+              className="bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 transition-colors flex items-center"
+              disabled={apiLoading} 
+            >
+                <FiDownload className="mr-2" />
+                Exportar Todo (CSV)
+            </button>
+        </div>
+      </div>
+      
+      {/* --- Sección de Grupos (Foco de la gestión) --- */}
+      <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 mb-8">
+        <h2 className="text-2xl font-bold text-gray-800 border-b pb-3 mb-4 flex justify-between items-center">
+            Grupos Programados
+        </h2>
+        
+        {capacitacionData.grupos.length === 0 ? (
+            <p className="text-gray-500 italic">No hay grupos programados para esta capacitación.</p>
+        ) : (
+            <div className="space-y-4">
+                {capacitacionData.grupos.map((grupo, index) => (
+                    <div key={grupo.id} className="p-4 border border-gray-200 rounded-lg bg-gray-50 flex justify-between items-center">
+                        <div className="flex-1 min-w-0">
+                            <h3 className="text-lg font-semibold text-gray-900">Grupo {index + 1}</h3>
+                            <div className="text-sm text-gray-700 space-y-1 mt-1">
+                                <p>
+                                    <FiCalendar className="inline mr-2 text-[#D80027]"/> 
+                                    Inicio: {formatDateTime(grupo.fechaInicio)}
+                                </p>
+                                <p>
+                                    <FiCalendar className="inline mr-2 text-[#D80027]"/> 
+                                    Fin: {formatDateTime(grupo.fechaFin)}
+                                </p>
+                                <p>
+                                    <FiUsers className="inline mr-2 text-[#D80027]"/> 
+                                    Cupo: {grupo.inscripcionesCount} / {grupo.cupoMaximo}
+                                </p>
                             </div>
-                        </div>
-                        <div className="flex items-start text-gray-700">
-                            <FiInfo className="w-6 h-6 text-blue-600 mr-3 mt-1 flex-shrink-0" />
-                            <div>
-                                <p className="font-semibold">Instructor:</p>
-                                <p>{capacitacion.instructor}</p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section className="p-6 bg-white rounded-xl shadow-lg border border-gray-100">
-                    <h2 className="text-2xl font-bold text-gray-800 mb-4">Fechas y Grupos Disponibles</h2>
-                    {grupos.length > 0 ? (
-                        <div className="space-y-4">
-                            {grupos.map(grupo => {
-                                const cupoDisponible = grupo.cupoMaximo - grupo.inscripcionesCount;
-                                const isFull = cupoDisponible <= 0;
-                                return (
-                                    <div key={grupo.id} className={`p-4 rounded-lg border flex justify-between items-center ${isFull ? 'bg-red-50 border-red-200 opacity-70' : 'bg-green-50 border-green-200'}`}>
-                                        <div className='flex items-center'>
-                                            <FiCalendar className={`w-5 h-5 mr-3 ${isFull ? 'text-red-600' : 'text-green-600'}`} />
-                                            <div>
-                                                <p className="font-semibold text-gray-800">Inicio: {new Date(grupo.fechaInicio).toLocaleDateString('es-AR', { dateStyle: 'full' })}</p>
-                                                <p className="text-sm text-gray-600">Fin: {new Date(grupo.fechaFin).toLocaleDateString('es-AR', { dateStyle: 'full' })}</p>
-                                            </div>
-                                        </div>
-                                        <div className='text-right'>
-                                            <p className={`font-bold ${isFull ? 'text-red-600' : 'text-green-600'}`}>
-                                                {isFull ? '¡Cupo Completo!' : `Quedan ${cupoDisponible} lugares`}
-                                            </p>
-                                            <p className="text-xs text-gray-500">Total: {grupo.cupoMaximo}</p>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <p className="text-gray-500">Aún no hay grupos programados para esta capacitación.</p>
-                    )}
-                </section>
-            </div>
-
-            {/* --- Columna de Formulario --- */}
-            <div className="lg:col-span-1">
-                <div className="sticky top-12 bg-white p-6 rounded-xl shadow-2xl border border-blue-100">
-                    <h2 className="text-2xl font-extrabold text-blue-600 mb-6">Formulario de Inscripción</h2>
-                    
-                    {error && (
-                        <div className="p-3 mb-4 text-sm text-red-700 bg-red-100 rounded-lg" role="alert">
-                            {error}
-                        </div>
-                    )}
-
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        {/* Campo Nombre */}
-                        <div>
-                            <label htmlFor="nombreUsuario" className="block text-sm font-medium text-gray-700">Nombre y Apellido *</label>
-                            <div className="mt-1 relative rounded-md shadow-sm">
-                                <input
-                                    type="text"
-                                    name="nombreUsuario"
-                                    id="nombreUsuario"
-                                    required
-                                    value={formData.nombreUsuario}
-                                    onChange={handleChange}
-                                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
-                                    placeholder="Ej: Juan Pérez"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Campo Email */}
-                        <div>
-                            <label htmlFor="emailUsuario" className="block text-sm font-medium text-gray-700">Email *</label>
-                            <div className="mt-1 relative rounded-md shadow-sm">
-                                <input
-                                    type="email"
-                                    name="emailUsuario"
-                                    id="emailUsuario"
-                                    required
-                                    value={formData.emailUsuario}
-                                    onChange={handleChange}
-                                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
-                                    placeholder="ejemplo@correo.com"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Campo Teléfono */}
-                        <div>
-                            <label htmlFor="telefono" className="block text-sm font-medium text-gray-700">Teléfono (Opcional)</label>
-                            <div className="mt-1 relative rounded-md shadow-sm">
-                                <input
-                                    type="tel"
-                                    name="telefono"
-                                    id="telefono"
-                                    value={formData.telefono}
-                                    onChange={handleChange}
-                                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
-                                    placeholder="Ej: 11 5555 6666"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Selector de Grupo */}
-                        <div>
-                            <label htmlFor="grupoId" className="block text-sm font-medium text-gray-700">Seleccionar Grupo / Fecha *</label>
-                            <select
-                                id="grupoId"
-                                name="grupoId"
-                                required
-                                value={formData.grupoId}
-                                onChange={handleChange}
-                                className="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base border focus:border-blue-500 focus:outline-none focus:ring-blue-500 text-gray-700"
-                            >
-                                <option value="">Seleccione una fecha...</option>
-                                {grupos.map(grupo => {
-                                    const cupoDisponible = grupo.cupoMaximo - grupo.inscripcionesCount;
-                                    const isDisabled = cupoDisponible <= 0;
-                                    return (
-                                        <option 
-                                            key={grupo.id} 
-                                            value={grupo.id} 
-                                            disabled={isDisabled}
-                                        >
-                                            {new Date(grupo.fechaInicio).toLocaleDateString('es-AR')} - {isDisabled ? ' (Completo)' : ` (${cupoDisponible} libres)`}
-                                        </option>
-                                    );
-                                })}
-                            </select>
                         </div>
                         
-                        {/* Selector de Concesionario */}
-                        <div>
-                            <label htmlFor="concesionarioId" className="block text-sm font-medium text-gray-700">Concesionario (Opcional)</label>
-                            <select
-                                id="concesionarioId"
-                                name="concesionarioId"
-                                value={formData.concesionarioId}
-                                onChange={handleChange}
-                                className="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base border focus:border-blue-500 focus:outline-none focus:ring-blue-500 text-gray-700"
+                        <div className="flex space-x-3">
+                            <Link 
+                                href={`/admin/grupos/${grupo.id}/inscriptos`}
+                                className="text-sm px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-150 flex items-center"
                             >
-                                <option value="">(Ninguno / No aplica)</option>
-                                {concesionarios.map(concesionario => (
-                                    <option key={concesionario.id} value={concesionario.id}>
-                                        {concesionario.nombre}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
+                                <FiUsers className="mr-2" />
+                                Ver Inscriptos ({grupo.inscripcionesCount})
+                            </Link>
 
-                        {/* Botón de Submit */}
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white ${loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors'}`}
-                        >
-                            {loading ? 'Inscribiendo...' : 'Inscribirse Ahora'}
-                        </button>
-                    </form>
-                    <p className="mt-4 text-xs text-center text-gray-500">* Campos obligatorios.</p>
-                </div>
+                            <Link 
+                                href={`/admin/capacitaciones/${capacitacionData.id}/edit`} 
+                                className="text-sm px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition duration-150 flex items-center"
+                                title="El manejo de grupos se realiza en la vista de edición de la capacitación."
+                            >
+                                <FiEdit2 className="mr-2" />
+                                Editar Grupos
+                            </Link>
+                        </div>
+                    </div>
+                ))}
             </div>
-        </div>
-      </main>
-      
-      <footer className="bg-white text-gray-800 p-6 text-center mt-12">
-        <p>© {new Date().getFullYear()} Crucianelli S.A. | Todos los derechos reservados.</p>
-      </footer>
+        )}
+      </div>
+      {/* TAREA 8.1: SE ELIMINÓ LA SECCIÓN DE TABLA DE INSCRIPTOS OBSOLETA (R8) */}
     </div>
   );
 }
 
-// getServerSideProps (CON LA CORRECCIÓN DEL PREFIJO /api)
+// --- getServerSideProps (Simplificado) ---
 export const getServerSideProps: GetServerSideProps<PageProps> = async (context) => {
-  context.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  const { id } = context.params!; 
+  const cookies = nookies.get(context);
+  const token = cookies.token;
+  if (!token) {
+    return { redirect: { destination: '/admin/login', permanent: false } };
+  }
+  const { id } = context.params!;
   try {
-    // CORRECCIÓN: Se agrega el prefijo /api/ a todas las llamadas SSR de API
-    const [resCap, resGru, resCon] = await Promise.all([
-      fetch(`${API_BASE_URL}/api/capacitaciones/${id}`),
-      fetch(`${API_BASE_URL}/api/grupos`),
-      fetch(`${API_BASE_URL}/api/concesionarios`),
-    ]);
+    // Solo llamamos al endpoint de Capacitación (admin/:id)
+    const resCap = await fetch(`${API_BASE_URL}/api/capacitaciones/admin/${id}`, { 
+        headers: { Authorization: `Bearer ${token}` } 
+    });
 
+    if (resCap.status === 401) {
+        nookies.destroy(context, 'token', { path: '/' });
+        return { redirect: { destination: '/admin/login', permanent: false } };
+    }
     if (resCap.status === 404) {
       return { notFound: true };
     }
-    
-    // Si la capacitación no existe o hay un error en la primera consulta (404, 500, etc.)
-    if (!resCap.ok) { 
-        console.error(`Error ${resCap.status} al cargar la capacitación: ${id}`);
-        return { props: { capacitacion: null, grupos: [], concesionarios: [], error: 'Error al cargar la capacitación. Intente más tarde.' } }; 
-    }
+
+    if (!resCap.ok) { return { props: { capacitacion: null, error: `Error ${resCap.status} al cargar la capacitación.` } }; }
     
     const dataCap = await resCap.json();
-
-    // Las otras dos consultas son auxiliares, si fallan, se devuelve array vacío
-    const dataGru = resGru.ok ? await resGru.json() : [];
-    const dataCon = resCon.ok ? await resCon.json() : [];
-
-    return { 
-      props: { 
-        capacitacion: dataCap, 
-        grupos: dataGru, 
-        concesionarios: dataCon 
-      } 
-    };
+    
+    // TAREA 8.1: Ya no se maneja ni se pasa dataInscriptos
+    return { props: { capacitacion: dataCap } };
   } catch (err: any) {
-    console.error(`SSR DEBUG: Error fetching data in capacitaciones/[id].tsx for ID ${id}:`, err);
-    return { props: { capacitacion: null, grupos: [], concesionarios: [], error: 'No se pudo conectar con el servidor de datos.' } };
+    console.error(`SSR DEBUG: Error fetching data in admin/[id].tsx for ID ${id}:`, err);
+    return { props: { capacitacion: null, error: 'No se pudo conectar.' } };
   }
 };

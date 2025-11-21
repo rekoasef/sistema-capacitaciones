@@ -1,85 +1,89 @@
 // backend/src/mail/mail.service.ts
 
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import * as nodemailer from 'nodemailer';
+import * as dotenv from 'dotenv';
 
-// --- ¡LA SOLUCIÓN! ---
-// Usamos 'require' en lugar de 'import' para compatibilidad con la librería de SendGrid
-const sgMail = require('@sendgrid/mail');
+dotenv.config();
+
+// Interfaz para el envío de correo de confirmación (R7)
+interface EmailDetails {
+  email: string;
+  nombreUsuario: string;
+  nombreCapacitacion: string;
+  fechaInicio: Date;
+  fechaFin: Date; // R1: Nuevo campo
+  ubicacion: string; // R6: Nuevo campo
+  concesionario: string | null;
+}
 
 @Injectable()
-export class MailService implements OnModuleInit {
+export class MailService {
+  private transporter: nodemailer.Transporter;
+  private readonly fromEmail = process.env.MAIL_FROM || 'no-reply@crucianelli.com.ar';
 
-  // Ya no necesitamos un constructor, usamos OnModuleInit para configurar
-  onModuleInit() {
-    const apiKey = process.env.SENDGRID_API_KEY;
-
-    if (!apiKey) {
-      console.warn('ADVERTENCIA: SENDGRID_API_KEY no está definida. Los emails reales no se enviarán.');
-    } else {
-      // ¡Ahora 'sgMail.setApiKey' SÍ existirá y funcionará!
-      sgMail.setApiKey(apiKey);
-      console.log('Servicio de Mail (SendGrid) inicializado y listo para enviar correos.');
-    }
+  constructor() {
+    this.transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
   }
 
-  async enviarEmailConfirmacion(
-    emailUsuario: string,
-    nombreUsuario: string,
-    capacitacion: any,
-    grupo: any,
-  ) {
-    const fromEmail = process.env.SENDGRID_FROM_EMAIL;
+  // Helper para formatear fechas
+  private formatDateTime(date: Date): string {
+    const dateOptions: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' };
+    const timeOptions: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
+    return `${date.toLocaleDateString('es-AR', dateOptions)} a las ${date.toLocaleTimeString('es-AR', timeOptions)} hs`;
+  }
 
-    if (!fromEmail || !process.env.SENDGRID_API_KEY) {
-      console.error('Error: Variables de SendGrid no configuradas. Simulando envío de email.');
-      return;
-    }
-
-    const fechaFormateada = new Date(grupo.fechaInicio).toLocaleDateString('es-AR', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-
-    const msg = {
-      to: emailUsuario,
-      from: {
-        email: fromEmail,
-        name: 'Capacitaciones Crucianelli',
-      },
-      subject: '✅ Confirmación de Inscripción - Capacitación Crucianelli',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-          <h1 style="color: #D80027; text-align: center;">¡Inscripción Confirmada!</h1>
-          <p style="font-size: 16px;">¡Hola ${nombreUsuario}!</p>
-          <p style="font-size: 16px;">Tu inscripción ha sido confirmada con éxito. Estamos muy contentos de tenerte con nosotros.</p>
-          <hr>
-          <h3 style="color: #333;">Detalles de la capacitación:</h3>
-          <ul style="font-size: 16px; list-style-type: none; padding-left: 0;">
-            <li><b>Capacitación:</b> ${capacitacion.nombre}</li>
-            <li><b>Instructor:</b> ${capacitacion.instructor}</li>
-            <li><b>Fecha:</b> ${fechaFormateada}</li>
-          </ul>
-          <p style="font-size: 16px;">¡Te esperamos!</p>
-          <br>
-          <p style="font-size: 12px; color: #888; text-align: center;">
-            Este es un email automático, por favor no respondas a este correo.
-          </p>
+  // Método para enviar el email de confirmación (R7)
+  async sendConfirmationEmail(details: EmailDetails) {
+    const formattedInicio = this.formatDateTime(details.fechaInicio);
+    const formattedFin = this.formatDateTime(details.fechaFin);
+    
+    // Contenido del correo con la ubicación y la hora de fin (R7)
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px;">
+        <h2 style="color: #D80027;">¡Inscripción Exitosa!</h2>
+        <p>Hola ${details.nombreUsuario},</p>
+        <p>Confirmamos tu inscripción a la siguiente capacitación:</p>
+        
+        <div style="border-left: 4px solid #0056b3; padding-left: 15px; margin: 20px 0;">
+          <h3 style="color: #0056b3; margin-top: 0;">${details.nombreCapacitacion}</h3>
+          <p><strong>Ubicación:</strong> ${details.ubicacion}</p>
+          <p><strong>Comienzo:</strong> ${formattedInicio}</p>
+          <p><strong>Finalización:</strong> ${formattedFin}</p>
+          ${details.concesionario ? `<p><strong>Concesionario:</strong> ${details.concesionario}</p>` : ''}
         </div>
-      `,
+        
+        <p>Por favor, guardá esta información. Si tenés alguna pregunta, contactanos.</p>
+        <p>¡Te esperamos!</p>
+        <p style="font-size: 0.9em; color: #777;">Equipo de Capacitaciones Crucianelli</p>
+      </div>
+    `;
+
+    const mailOptions = {
+      from: this.fromEmail,
+      to: details.email,
+      subject: `Confirmación: Inscripción a ${details.nombreCapacitacion}`,
+      html: emailHtml,
     };
 
     try {
-      await sgMail.send(msg);
-      console.log(`Email enviado exitosamente a ${emailUsuario}`);
-    } catch (error: any) {
-      console.error('Error al enviar email con SendGrid:');
-      if (error.response) {
-        console.error(error.response.body);
-      } else {
-        console.error(error);
-      }
+      await this.transporter.sendMail(mailOptions);
+    } catch (error) {
+      console.error('Nodemailer Error:', error);
+      throw new InternalServerErrorException('Error al enviar el correo de confirmación.');
     }
+  }
+
+  // Método para verificar la conexión SMTP (opcional)
+  async verifyConnection() {
+    return this.transporter.verify();
   }
 }

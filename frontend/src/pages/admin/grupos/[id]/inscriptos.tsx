@@ -1,350 +1,384 @@
 // frontend/src/pages/admin/grupos/[id]/inscriptos.tsx
 
-import React, { useState, useEffect, useCallback } from 'react'; 
-import Head from 'next/head';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import Head from 'next/head';
 import Link from 'next/link';
+import { FiArrowLeft, FiUserCheck, FiUserX, FiCalendar, FiClock, FiUsers, FiMapPin } from 'react-icons/fi'; 
+import type { InferGetServerSidePropsType, GetServerSideProps } from 'next';
+import toast from 'react-hot-toast';
 import { useApi } from '@/hooks/useApi';
-import { FiUsers, FiCheckCircle, FiXCircle, FiClock, FiMapPin, FiRefreshCw } from 'react-icons/fi';
-import AdminLayout from '@/components/AdminLayout'; 
-import toast from 'react-hot-toast'; // Agregamos toast
+import nookies from 'nookies';
+import AdminLayout from '@/components/AdminLayout';
 
-// --- INTERFACES DE DATOS (Basadas en el Backend 6.1) ---
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
 
-type InscripcionEstado = 'PENDIENTE' | 'ASISTIÓ' | 'AUSENTE' | 'CANCELADA';
+// --- INTERFACES ---
 
-interface Concesionario {
+type EstadoInscripcion = 'AUSENTE' | 'ASISTIÓ' | 'PENDIENTE' | 'CANCELADA'; 
+
+interface GrupoSegmento {
+    id?: number;
+    dia: string; // YYYY-MM-DD
+    horaInicio: string; // HH:MM
+    horaFin: string; // HH:MM
+}
+
+interface Capacitacion {
+  id: number;
+  nombre: string;
+  ubicacion: string; 
+}
+
+interface ConcesionarioSimple {
     nombre: string;
-    email: string;
-    telefono: string;
 }
 
 interface Inscripcion {
-    id: number;
-    nombreUsuario: string; // Faltaba en la interfaz anterior
-    estado: InscripcionEstado;
-    concesionario: Concesionario;
-    createdAt: string; 
+  id: number;
+  nombreUsuario: string;
+  emailUsuario: string;
+  telefono: string | null;
+  concesionario: ConcesionarioSimple | null; 
+  estado: EstadoInscripcion;
+  createdAt: string;
 }
 
-interface KPIs {
-    totalInscripciones: number;
-    asistencias: number;
-    ausencias: number;
-    pendientes: number;
-    cupoMaximo: number;
+interface Grupo {
+  id: number;
+  capacitacion: Capacitacion;
+  fechaInicio?: string; 
+  fechaFin?: string;
+  cupoMaximo: number;
+  inscripciones: Inscripcion[];
+  segmentos: GrupoSegmento[]; 
+  kpis?: any;
 }
 
-interface GrupoDetail {
-    id: number;
-    capacitacionId: number;
-    capacitacion: {
-        id: number;
-        nombre: string;
-    };
-    fechaInicio: string;
-    fechaFin: string;
-    cupoMaximo: number;
-    inscripciones: Inscripcion[];
-    kpis: KPIs;
-}
+type PageProps = {
+  grupo: Grupo | null;
+  error?: string;
+};
 
 // --- HELPERS ---
 
-// Formatea la fecha y hora
-const formatDateTime = (dateString: string) => {
+const formatDateOnly = (dateString?: string): string => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    const dateOptions: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' };
-    const timeOptions: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
-    return `${date.toLocaleDateString('es-AR', dateOptions)} ${date.toLocaleTimeString('es-AR', timeOptions)}`;
+    const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' };
+    return date.toLocaleDateString('es-AR', options);
 };
 
-// Devuelve el texto y el color de Tailwind para el estado
-const getStatusBadge = (status: InscripcionEstado) => {
+const getStatusBadge = (status: EstadoInscripcion) => {
     switch (status) {
         case 'ASISTIÓ':
-            return <span className="px-3 py-1 text-sm font-medium text-green-800 bg-green-100 rounded-full">Asistió</span>;
+            return <span className="px-3 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full">Asistió</span>;
         case 'AUSENTE':
-            return <span className="px-3 py-1 text-sm font-medium text-red-800 bg-red-100 rounded-full">Ausente</span>;
+            return <span className="px-3 py-1 text-xs font-medium text-red-800 bg-red-100 rounded-full">Ausente</span>;
         case 'PENDIENTE':
-            return <span className="px-3 py-1 text-sm font-medium text-yellow-800 bg-yellow-100 rounded-full">Pendiente</span>;
+            return <span className="px-3 py-1 text-xs font-medium text-yellow-800 bg-yellow-100 rounded-full">Pendiente</span>;
         case 'CANCELADA':
-            return <span className="px-3 py-1 text-sm font-medium text-gray-800 bg-gray-200 rounded-full">Cancelada</span>;
+            return <span className="px-3 py-1 text-xs font-medium text-gray-800 bg-gray-200 rounded-full">Cancelada</span>;
         default:
-            return <span className="px-3 py-1 text-sm font-medium text-gray-500 bg-gray-100 rounded-full">Desconocido</span>;
+            return <span className="px-3 py-1 text-xs font-medium text-gray-500 bg-gray-100 rounded-full">Desconocido</span>;
     }
 };
 
-// Tarjeta para mostrar KPIs
-const KpiCard: React.FC<{ title: string; value: number | string; icon: React.ReactNode; color: string }> = ({ title, value, icon, color }) => (
-    <div className={`p-4 bg-white rounded-xl shadow flex items-center justify-between border-l-4 ${color}`}>
-        <div>
-            <p className="text-sm font-medium text-gray-500">{title}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-        </div>
-        <div className={`p-3 rounded-full ${color.replace('border-', 'bg-')}/10 text-xl`}>{icon}</div>
-    </div>
-);
 
-const GrupoHeader: React.FC<{ grupo: GrupoDetail }> = ({ grupo }) => (
-    <div className="bg-white p-6 rounded-xl shadow-md space-y-4">
-        <h2 className="text-2xl font-bold text-gray-800 border-b pb-3 mb-4">
-            {grupo.capacitacion.nombre}
-        </h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-gray-700">
-            <div className="flex items-center space-x-2">
-                <FiClock className="text-xl text-[#D80027]" />
-                <div>
-                    <span className="font-semibold block text-sm">Inicio:</span>
-                    <span className="text-base">{formatDateTime(grupo.fechaInicio)}</span>
-                </div>
-            </div>
-            <div className="flex items-center space-x-2">
-                <FiClock className="text-xl text-[#D80027]" />
-                <div>
-                    <span className="font-semibold block text-sm">Fin:</span>
-                    <span className="text-base">{formatDateTime(grupo.fechaFin)}</span>
-                </div>
-            </div>
-            <div className="flex items-center space-x-2">
-                <FiUsers className="text-xl text-[#D80027]" />
-                <div>
-                    <span className="font-semibold block text-sm">Cupo Máximo:</span>
-                    <span className="text-base">{grupo.cupoMaximo}</span>
-                </div>
-            </div>
-        </div>
-    </div>
-);
+// Componente principal
+export default function GrupoInscriptosPage({
+  grupo: initialGrupo,
+  error: initialError,
+}: InferGetServerSidePropsType<typeof getServerSideProps>) {
+  
+  const router = useRouter();
+  const { id: grupoId } = router.query;
+  const { request, loading: apiLoading } = useApi(); 
 
-// --- COMPONENTE PRINCIPAL ---
-
-export default function InscriptosPage() {
-    const router = useRouter();
-    const { id } = router.query;
-    const groupId = id ? parseInt(id as string) : null;
-
-    // Uso correcto del hook
-    const { request, loading: apiLoading, error: hookError } = useApi(); 
-    
-    const [grupoData, setGrupoData] = useState<GrupoDetail | null>(null);
-    const [error, setError] = useState<Error | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-
-    // Función para obtener los datos
-    const fetchData = useCallback(async () => {
-        if (!groupId) return;
-        setIsLoading(true);
-        setError(null);
-        try {
-            const data = await request<GrupoDetail>(`/grupos/${groupId}/inscriptos`);
-            setGrupoData(data);
-        } catch (err: any) {
-            setError(err);
-            toast.error(err.message || "Error al cargar los datos.");
-        } finally {
-            setIsLoading(false);
-        }
-    }, [groupId, request]);
-    
-    // Función de refresh que el usuario puede usar
-    const refresh = useCallback(() => {
-        fetchData();
-    }, [fetchData]);
-
-
-    // useEffect para disparar la carga inicial
-    useEffect(() => {
-        fetchData();
-    }, [fetchData]);
-
-
-    // Manejo de estado de asistencia y baja (R9)
-    const handleUpdateStatus = (inscripcionId: number, nuevoEstado: InscripcionEstado) => {
-        // FIX: Se usa toast() en lugar de toast.info()
-        toast(`Funcionalidad de asistencia (${nuevoEstado}) para inscr. ${inscripcionId} se implementará en la próxima fase.`);
-    };
-
-    const handleDarDeBaja = (inscripcionId: number) => {
-        // FIX: Se usa toast() en lugar de toast.info()
-        toast(`Funcionalidad de Dar de Baja para inscr. ${inscripcionId} se implementará en la próxima fase.`);
-    };
-
-
-    if (error || hookError) {
-        return (
-            <AdminLayout>
-                <div className="text-center py-10">
-                    <h1 className="text-2xl font-bold text-red-600">Error al Cargar</h1>
-                    <p className="text-gray-600">No se pudo cargar la información del grupo. {error?.message || hookError}</p>
-                    <button onClick={refresh} className="mt-4 p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-150 flex items-center mx-auto">
-                        <FiRefreshCw className="inline mr-2"/> Reintentar
-                    </button>
-                </div>
-            </AdminLayout>
-        );
+  const [grupo, setGrupo] = useState(initialGrupo);
+  const [error] = useState(initialError); 
+  const [filter, setFilter] = useState('');
+  
+  // --- FUNCIÓN DE REFRESCO ---
+  const fetchData = useCallback(async () => {
+    if (!grupoId) return;
+    try {
+        const data: Grupo = await request(`/grupos/${grupoId}/inscriptos`); 
+        setGrupo(data);
+    } catch (err) {
+        console.error("Error fetching group data on refresh:", err);
     }
-    
-    if (isLoading || !grupoData) {
-        return (
-            <AdminLayout>
-                <div className="text-center py-10">
-                    <h1 className="text-2xl font-bold text-gray-800">Cargando Detalle del Grupo...</h1>
-                    <p className="text-gray-500">Por favor, espere.</p>
-                </div>
-            </AdminLayout>
-        );
-    }
+  }, [grupoId, request]);
+  
+  useEffect(() => {
+    if (initialGrupo) setGrupo(initialGrupo);
+  }, [initialGrupo]);
 
-    const { kpis, inscripciones, capacitacionId } = grupoData;
-    const cupo = `${kpis.totalInscripciones}/${kpis.cupoMaximo}`;
-    
+
+  // --- RETORNOS CONDICIONALES ---
+  if (error) {
     return (
-        <AdminLayout>
-            <Head>
-                <title>Inscritos Grupo {groupId} - Admin</title>
-            </Head>
+      <AdminLayout>
+        <div className="p-4 text-red-500 bg-red-100 rounded-lg max-w-4xl mx-auto my-8">
+            <h1 className="text-xl font-bold text-red-600">Error de Carga</h1>
+            <p>{error}</p>
+        </div>
+      </AdminLayout>
+    );
+  }
+  if (!grupo) {
+    return (
+      <AdminLayout>
+        <div className="p-4 max-w-4xl mx-auto my-8">Cargando o Grupo no encontrado...</div>
+      </AdminLayout>
+    );
+  }
+  
+  const { capacitacion } = grupo;
+  const inscriptos = grupo.inscripciones || [];
+  const inscripcionesCount = inscriptos.length;
+  const cupoDisponible = grupo.cupoMaximo - inscripcionesCount;
 
-            <div className="max-w-7xl mx-auto py-8 space-y-6">
+  
+  // --- LÓGICA DE FILTRADO (useMemo) ---
+  const filteredInscriptos = useMemo(() => {
+    if (!filter) return inscriptos;
+    const lowerCaseFilter = filter.toLowerCase();
+    return inscriptos.filter(i => {
+        const concesionarioNombre = i.concesionario?.nombre?.toLowerCase() || '';
+        const telefono = i.telefono || '';
+        
+        return (
+            i.nombreUsuario.toLowerCase().includes(lowerCaseFilter) ||
+            i.emailUsuario.toLowerCase().includes(lowerCaseFilter) ||
+            concesionarioNombre.includes(lowerCaseFilter) ||
+            telefono.includes(lowerCaseFilter)
+        );
+    });
+  }, [inscriptos, filter]);
+  
+  
+  // --- MANEJADOR DE ASISTENCIA (useCallback) ---
+  const handleToggleAsistencia = useCallback(async (inscripcionId: number) => {
+    const inscripcion = inscriptos.find(i => i.id === inscripcionId);
+    if (!inscripcion) return;
+
+    const newEstado = inscripcion.estado === 'ASISTIÓ' ? 'AUSENTE' : 'ASISTIÓ'; 
+    const toastId = toast.loading(`Actualizando asistencia a ${newEstado}...`);
+
+    try {
+      await request<Inscripcion>(`/inscripciones/${inscripcionId}`, {
+        method: 'PATCH',
+        body: { estado: newEstado }, 
+      });
+
+      fetchData(); 
+
+      toast.success('Asistencia actualizada con éxito.', { id: toastId });
+
+    } catch (err: any) {
+      toast.error(err.message || 'Error al actualizar asistencia.', { id: toastId });
+    }
+  }, [inscriptos, request, fetchData]);
+
+
+  // --- RENDERIZADO ---
+  return (
+    <AdminLayout>
+      <Head>
+        <title>Inscriptos | {capacitacion.nombre} - Admin</title>
+      </Head>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-8">
+        <div className="flex justify-between items-center mb-6 border-b pb-4">
+            <h1 className="text-3xl font-extrabold text-gray-900">
+                Gestión de Inscriptos del Grupo #{grupoId}
+            </h1>
+            <Link href={`/admin/capacitaciones/${capacitacion.id}`} className="flex items-center text-blue-600 hover:text-blue-800 transition-colors">
+                <FiArrowLeft className="w-4 h-4 mr-1" />
+                Volver a la Capacitación
+            </Link>
+        </div>
+
+        {/* --- Detalles del Grupo (TAREA 9.4.2) --- */}
+        <div className="bg-white p-6 shadow-xl rounded-lg mb-8 border border-blue-100">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">{capacitacion.nombre}</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 
-                <div className="flex justify-between items-center">
-                    <h1 className="text-3xl font-bold text-gray-800">
-                        Inscriptos del Grupo #{groupId}
-                    </h1>
-                    <Link href={`/admin/capacitaciones/${capacitacionId}`} className="text-blue-600 hover:underline flex items-center">
-                        &larr; Volver a la Capacitación
-                    </Link>
-                </div>
-                
-                {/* 1. HEADER DE GRUPO */}
-                <GrupoHeader grupo={grupoData} />
-
-                {/* 2. KPIs / ESTADÍSTICAS (R9) */}
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-6">
-                    <KpiCard 
-                        title="Inscriptos Totales" 
-                        value={kpis.totalInscripciones} 
-                        icon={<FiUsers />} 
-                        color="border-indigo-500 text-indigo-500"
-                    />
-                    <KpiCard 
-                        title="Cupo" 
-                        value={cupo} 
-                        icon={<FiMapPin />}
-                        color="border-gray-500 text-gray-500"
-                    />
-                    <KpiCard 
-                        title="Pendientes" 
-                        value={kpis.pendientes} 
-                        icon={<FiClock />} 
-                        color="border-yellow-500 text-yellow-500"
-                    />
-                    <KpiCard 
-                        title="Asistencias" 
-                        value={kpis.asistencias} 
-                        icon={<FiCheckCircle />} 
-                        color="border-green-500 text-green-500"
-                    />
-                     <KpiCard 
-                        title="Ausencias" 
-                        value={kpis.ausencias} 
-                        icon={<FiXCircle />} 
-                        color="border-red-500 text-red-500"
-                    />
-                </div>
-
-                {/* 3. TABLA DE INSCRIPTOS */}
-                <div className="bg-white p-6 rounded-xl shadow-md mt-6">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-bold text-gray-800">Lista de Participantes ({inscripciones.length})</h2>
-                         <button onClick={refresh} className="text-sm px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition duration-150 flex items-center">
-                            <FiRefreshCw className="mr-2"/> Refrescar
-                        </button>
+                {/* Columna 1: Información general */}
+                <div className='border-r pr-4'>
+                    <div className="flex items-center text-lg font-semibold text-gray-700 mb-2">
+                        <FiMapPin className="w-5 h-5 mr-2 text-blue-500" />
+                        <p>Ubicación: {capacitacion.ubicacion}</p>
                     </div>
-                    
-                    {inscripciones.length === 0 ? (
-                        <p className="text-gray-500 italic">Este grupo aún no tiene participantes inscriptos.</p>
+                    {/* KPI de Cupo */}
+                    <div className="flex items-center text-lg font-semibold text-gray-700">
+                        <FiUsers className="w-5 h-5 mr-2 text-blue-500" />
+                        <p>
+                            Cupo: {inscripcionesCount} / {grupo.cupoMaximo} 
+                            <span className={`ml-2 text-sm font-normal ${cupoDisponible <= 0 ? 'text-red-500' : 'text-green-600'}`}>
+                                ({cupoDisponible <= 0 ? 'Completo' : `${cupoDisponible} libre(s)`})
+                            </span>
+                        </p>
+                    </div>
+                </div>
+
+                {/* Columna 2: Segmentos de Horario */}
+                <div className='md:col-span-2'>
+                    <h3 className="font-bold text-gray-800 mb-2 flex items-center">
+                        <FiClock className="w-5 h-5 mr-2 text-blue-600" />
+                        Programación Detallada:
+                    </h3>
+                    {/* FIX: Encadenamiento Opcional (?) para evitar el error de 'length' */}
+                    {grupo.segmentos?.length > 0 ? ( 
+                        <ul className="text-sm text-gray-700 space-y-1">
+                            {grupo.segmentos.map((segmento, i) => (
+                                <li key={i}>
+                                    <span className="font-semibold mr-1">{formatDateOnly(segmento.dia)}:</span> {segmento.horaInicio} - {segmento.horaFin} hs
+                                </li>
+                            ))}
+                        </ul>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Nombre
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Concesionario
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Email
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Teléfono
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Estado
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Acciones
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {inscripciones.map((inscripcion) => (
-                                        <tr key={inscripcion.id}>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                                {inscripcion.nombreUsuario}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                                {inscripcion.concesionario.nombre}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                                {inscripcion.concesionario.email}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                                {inscripcion.concesionario.telefono || 'N/A'}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                {getStatusBadge(inscripcion.estado)}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                                {/* Botones de acción para R9 */}
-                                                <button 
-                                                    onClick={() => handleUpdateStatus(inscripcion.id, 'ASISTIÓ')}
-                                                    title="Marcar Asistencia"
-                                                    className="p-2 rounded-lg bg-green-100 text-green-700 hover:bg-green-200"
-                                                    disabled={apiLoading}
-                                                >
-                                                  <FiCheckCircle />
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleUpdateStatus(inscripcion.id, 'AUSENTE')}
-                                                    title="Marcar Ausencia"
-                                                    className="p-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200"
-                                                    disabled={apiLoading}
-                                                >
-                                                  <FiXCircle />
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleDarDeBaja(inscripcion.id)}
-                                                    title="Dar de Baja"
-                                                    className="p-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
-                                                    disabled={apiLoading}
-                                                >
-                                                  <FiUsers />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                        <p className="text-sm text-red-500">
+                            Advertencia: Este grupo no tiene segmentos de horario definidos.
+                        </p>
                     )}
                 </div>
-
             </div>
-        </AdminLayout>
-    );
+        </div>
+        
+
+        {/* --- Tabla de Inscripciones --- */}
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Buscar por nombre, email, teléfono o concesionario..."
+            className="w-full md:w-1/3 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+          <p className="text-sm text-gray-500 mt-2">Total Inscriptos: {filteredInscriptos.length}</p>
+        </div>
+
+        <div className="overflow-x-auto bg-white shadow-lg rounded-lg">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Nombre
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Email / Teléfono
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Concesionario
+                </th>
+                <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Estado
+                </th>
+                <th scope="col" className="relative px-6 py-3">
+                  <span className="sr-only">Acciones</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredInscriptos.length > 0 ? (
+                filteredInscriptos.map((inscripcion) => (
+                  <tr key={inscripcion.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {inscripcion.nombreUsuario}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {inscripcion.emailUsuario}
+                      <br />
+                      <span className='text-xs text-gray-400'>{inscripcion.telefono || 'Sin Teléfono'}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {inscripcion.concesionario?.nombre || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
+                        {getStatusBadge(inscripcion.estado)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => handleToggleAsistencia(inscripcion.id)}
+                        disabled={apiLoading}
+                        className={`text-blue-600 hover:text-blue-900 ml-4 p-2 rounded-full transition-colors ${apiLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50'}`}
+                        title={inscripcion.estado === 'ASISTIÓ' ? 'Marcar como AUSENTE' : 'Marcar como ASISTIÓ'}
+                      >
+                        {inscripcion.estado === 'ASISTIÓ' ? <FiUserX className="w-5 h-5" /> : <FiUserCheck className="w-5 h-5" />}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                    {filter ? 'No se encontraron inscriptos con ese filtro.' : 'No hay inscriptos para este grupo todavía.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </AdminLayout>
+  );
 }
+
+// getServerSideProps (Se mantiene igual, confiando en el backend de la Tarea 9.2)
+export const getServerSideProps: GetServerSideProps<PageProps> = async (context) => {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
+  const cookies = nookies.get(context);
+  const token = cookies.token;
+  const { id } = context.params!; 
+  
+  if (!token) {
+    return {
+      redirect: {
+        destination: '/admin/login',
+        permanent: false,
+      },
+    };
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/grupos/${id}/inscriptos`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (res.status === 401) {
+        nookies.destroy(context, 'token');
+        return {
+            redirect: {
+                destination: '/admin/login',
+                permanent: false,
+            },
+        };
+    }
+    
+    if (res.status === 404) {
+      return { notFound: true };
+    }
+    
+    if (!res.ok) { 
+        const errorData = await res.json();
+        console.error(`Error ${res.status} al cargar el grupo: ${id}`, errorData);
+        return { props: { grupo: null, error: errorData.message || 'Error al cargar los inscriptos del grupo.' } }; 
+    }
+    
+    const data: Grupo = await res.json();
+
+    return { 
+      props: { 
+        grupo: data,
+      } 
+    };
+  } catch (err: any) {
+    console.error(`SSR DEBUG: Error fetching data in grupos/[id]/inscriptos.tsx for ID ${id}:`, err);
+    return { props: { grupo: null, error: 'No se pudo conectar con el servidor de datos.' } };
+  }
+};

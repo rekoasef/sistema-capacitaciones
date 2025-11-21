@@ -1,25 +1,32 @@
 // backend/src/capacitaciones/dto/create-capacitacion.dto.ts
-
-import { IsArray, IsOptional, ValidateNested, IsBoolean } from 'class-validator'; // <-- 1. Importar IsBoolean
+import { IsString, IsNotEmpty, IsBoolean, IsArray, ValidateNested, IsOptional, IsEnum } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateGrupoInternoDto } from './create-grupo-interno.dto';
 
 export class CreateCapacitacionDto {
-  nombre: string;
-  descripcion: string;
-  instructor: string;
-  modalidad: string;
+    @IsString()
+    @IsNotEmpty()
+    nombre: string;
 
-  // --- ¡NUEVO CAMPO! ---
-  @IsBoolean()
-  @IsOptional() // Es opcional, porque en la creación asumimos 'true' por defecto
-  visible?: boolean;
-  ubicacion: string;
+    @IsString()
+    descripcion: string;
 
-  // ¡LÓGICA EXISTENTE!
-  @IsArray()
-  @IsOptional()
-  @ValidateNested({ each: true })
-  @Type(() => CreateGrupoInternoDto)
-  grupos: CreateGrupoInternoDto[];
+    @IsString()
+    instructor: string;
+
+    @IsEnum(['Presencial', 'Online'], { message: 'La modalidad debe ser Presencial u Online.' })
+    modalidad: 'Presencial' | 'Online';
+
+    @IsString()
+    @IsOptional()
+    ubicacion: string;
+
+    @IsBoolean()
+    @IsOptional()
+    visible: boolean;
+    
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => CreateGrupoInternoDto)
+    grupos: CreateGrupoInternoDto[];
 }

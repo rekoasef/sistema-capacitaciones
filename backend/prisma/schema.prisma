@@ -17,7 +17,6 @@ model Capacitacion {
   descripcion String
   instructor  String
   modalidad   String
-  // --- FIX MIGRACIÓN: Valor por defecto temporal ---
   ubicacion   String   
   visible     Boolean   @default(true)
   createdAt   DateTime  @default(now())
@@ -25,15 +24,33 @@ model Capacitacion {
   grupos      Grupo[]
 }
 
+// --- MODELO GRUPO (MODIFICADO para Fase 9.0) ---
 model Grupo {
   id             Int           @id @default(autoincrement())
-  fechaInicio    DateTime
-  fechaFin       DateTime
+  // TAREA 9.1: ELIMINADO: fechaInicio DateTime
+  // TAREA 9.1: ELIMINADO: fechaFin DateTime
   cupoMaximo     Int
   capacitacion   Capacitacion  @relation(fields: [capacitacionId], references: [id])
   capacitacionId Int
   inscripciones  Inscripcion[]
+  // TAREA 9.1: Nuevo: Relación a Segmentos
+  segmentos      GrupoSegmento[] 
 }
+
+// --- NUEVO MODELO DE SEGMENTO DE GRUPO (TAREA 9.1) ---
+model GrupoSegmento {
+  id          Int      @id @default(autoincrement())
+  dia         DateTime // Día del segmento
+  horaInicio  String   // Hora de inicio (ej: "09:00")
+  horaFin     String   // Hora de finalización (ej: "16:00")
+  
+  grupo       Grupo    @relation(fields: [grupoId], references: [id])
+  grupoId     Int
+  
+  // Restricción: Un grupo solo puede tener un segmento por día
+  @@unique([grupoId, dia])
+}
+
 
 model Concesionario {
   id            Int           @id @default(autoincrement())
@@ -42,10 +59,10 @@ model Concesionario {
 }
 
 
-// --- MODELO INSCRIPCION (Formato corregido) ---
+// --- MODELO INSCRIPCION (Se mantiene) ---
 model Inscripcion {
   id                     Int            @id @default(autoincrement())
-  nombreUsuario          String // <-- FORMATO CORREGIDO
+  nombreUsuario          String 
   emailUsuario           String
   estado                 String         @default("PENDIENTE")
   grupo                  Grupo          @relation(fields: [grupoId], references: [id])

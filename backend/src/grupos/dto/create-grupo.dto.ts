@@ -1,13 +1,12 @@
 // src/grupos/dto/create-grupo.dto.ts
 
-import { IsDateString, IsInt, Min } from 'class-validator';
+import { IsInt, Min, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+// Importamos el nuevo DTO de segmento
+import { CreateGrupoSegmentoDto } from './create-grupo-segmento.dto';
 
 export class CreateGrupoDto {
-  @IsDateString()
-  fechaInicio: string; // Esperamos una fecha en formato string (ej: "2025-12-31T18:00:00Z")
-
-  @IsDateString()
-  fechaFin: string;
+  // TAREA 9.2: ELIMINADOS: fechaInicio y fechaFin
 
   @IsInt() // Asegura que sea un número entero
   @Min(1) // Asegura que el cupo sea como mínimo 1
@@ -15,4 +14,10 @@ export class CreateGrupoDto {
 
   @IsInt() // Asegura que sea un número entero
   capacitacionId: number; // El ID de la capacitación a la que pertenece
+  
+  // TAREA 9.2: Nuevo campo para crear los segmentos junto con el grupo
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateGrupoSegmentoDto)
+  segmentos: CreateGrupoSegmentoDto[];
 }

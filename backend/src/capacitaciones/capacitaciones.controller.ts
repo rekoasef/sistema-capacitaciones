@@ -1,90 +1,82 @@
 // backend/src/capacitaciones/capacitaciones.controller.ts
-
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Param,
-  Delete,
-  UseGuards,
-  Res,
-  Patch,
-} from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Res, ParseIntPipe, NotFoundException } from '@nestjs/common';
 import { CapacitacionesService } from './capacitaciones.service';
 import { CreateCapacitacionDto } from './dto/create-capacitacion.dto';
 import { UpdateCapacitacionDto } from './dto/update-capacitacion.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { Response } from 'express';
 
 @Controller('capacitaciones')
 export class CapacitacionesController {
   constructor(private readonly capacitacionesService: CapacitacionesService) {}
 
-  @Get(':id/exportar/csv')
-  @UseGuards(AuthGuard('jwt'))
-  async exportCapacitacionToCsv(
-    @Param('id') id: string,
-    @Res() res: Response,
-  ) {
-    const csv = await this.capacitacionesService.exportCapacitacionToCsv(+id);
-    const filename = `inscriptos_capacitacion_${id}.csv`;
-    res.header('Content-Type', 'text/csv');
-    res.attachment(filename);
-    return res.send(csv);
-  }
-
   @Post()
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard)
   create(@Body() createCapacitacionDto: CreateCapacitacionDto) {
     return this.capacitacionesService.create(createCapacitacionDto);
   }
 
-  // --- ¡NUEVO ENDPOINT DE ADMIN! ---
-  // Devuelve TODAS las capacitaciones (visibles y ocultas) para el panel de admin.
-  // Debe ir antes de /:id para que 'admin' no sea tomado como un id.
-  @Get('admin/all')
-  @UseGuards(AuthGuard('jwt'))
-  findAllForAdmin() {
-    return this.capacitacionesService.findAllForAdmin();
-  }
-
-  @Get('admin/:id')
-  @UseGuards(AuthGuard('jwt'))
-  findOneForAdmin(@Param('id') id: string) {
-    return this.capacitacionesService.findOneForAdmin(+id);
-  }
-
-  // --- PÚBLICO (FILTRADO) ---
+  // Rutas públicas
   @Get()
   findAll() {
     return this.capacitacionesService.findAll();
   }
 
-  // --- PÚBLICO (FILTRADO) ---
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.capacitacionesService.findOne(+id);
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.capacitacionesService.findOne(id);
+  }
+
+  // Rutas de administración (protegidas)
+  @Get('admin')
+  @UseGuards(JwtAuthGuard)
+  findAllForAdmin() {
+    return this.capacitacionesService.findAllForAdmin();
+  }
+
+  @Get('admin/:id')
+  @UseGuards(JwtAuthGuard)
+  findOneForAdmin(@Param('id', ParseIntPipe) id: number) {
+    return this.capacitacionesService.findOneForAdmin(id);
   }
 
   @Patch(':id')
-  @UseGuards(AuthGuard('jwt'))
-  update(
-    @Param('id') id: string,
-    @Body() updateCapacitacionDto: UpdateCapacitacionDto,
-  ) {
-    return this.capacitacionesService.update(+id, updateCapacitacionDto);
+  @UseGuards(JwtAuthGuard)
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateCapacitacionDto: UpdateCapacitacionDto) {
+    return this.capacitacionesService.update(id, updateCapacitacionDto);
   }
 
   @Delete(':id')
-  @UseGuards(AuthGuard('jwt'))
-  remove(@Param('id') id: string) {
-    return this.capacitacionesService.remove(+id);
+  @UseGuards(JwtAuthGuard)
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.capacitacionesService.remove(id);
   }
 
-  @Get(':id/inscriptos')
-  @UseGuards(AuthGuard('jwt'))
-  findInscriptos(@Param('id') id: string) {
-    return this.capacitacionesService.findInscriptosByCapacitacion(+id);
+  // Exportación global
+  @Get(':id/exportar/csv')
+  @UseGuards(JwtAuthGuard)
+  async exportInscriptos(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    try {
+      const csvData = await this.capacitacionesService.exportCapacitacionToCsv(id);
+
+      if (csvData.startsWith('No hay inscriptos')) {
+        return res.status(200).set({
+             'Content-Type': 'text/plain; charset=utf-8',
+        }).send(csvData);
+      }
+      
+      res.set({
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="inscriptos_capacitacion_${id}.csv"`,
+      }).send('\ufeff' + csvData);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw new NotFoundException(error.message);
+      }
+      res.status(500).send('Error interno al generar el archivo CSV.');
+    }
   }
 }
