@@ -5,8 +5,11 @@ FROM node:20-slim AS builder
 
 WORKDIR /usr/src/app
 
-# Instalar OpenSSL (Necesario para Prisma en Debian)
-RUN apt-get update -y && apt-get install -y openssl ca-certificates
+# Instalar OpenSSL y Procps (Necesario para Prisma/Node Watcher)
+RUN apt-get update -y && \
+    apt-get install -y openssl ca-certificates procps && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copiamos los archivos de configuración
 COPY package.json ./
@@ -32,8 +35,11 @@ WORKDIR /usr/src/app
 
 ENV NODE_ENV production
 
-# Instalar OpenSSL en producción
-RUN apt-get update -y && apt-get install -y openssl ca-certificates
+# Instalar OpenSSL y Procps en producción
+RUN apt-get update -y && \
+    apt-get install -y openssl ca-certificates procps && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # --- FIX CLAVE: Instalar NEST CLI globalmente para que el 'start:dev' funcione ---
 RUN npm install -g @nestjs/cli

@@ -82,15 +82,19 @@ const NuevaCapacitacionPage = () => {
     }));
   };
 
-  const handleGroupPropertyChange = (groupIndex: number, field: keyof GrupoData, value: string | number) => {
+  const handleGroupPropertyChange = (groupIndex: number, value: string | number) => {
     const nuevosGrupos = [...grupos];
-    (nuevosGrupos[groupIndex] as any)[field] = value;
+    nuevosGrupos[groupIndex].cupoMaximo = value;
     setGrupos(nuevosGrupos);
   };
   
   const handleSegmentChange = (groupIndex: number, segmentIndex: number, field: keyof GrupoSegmento, value: string) => {
       const nuevosGrupos = [...grupos];
-      (nuevosGrupos[groupIndex].segmentos[segmentIndex] as any)[field] = value;
+      // Clonamos el arreglo de segmentos para asegurar inmutabilidad anidada
+      const nuevosSegmentos = [...nuevosGrupos[groupIndex].segmentos];
+      (nuevosSegmentos[segmentIndex] as any)[field] = value;
+      nuevosGrupos[groupIndex].segmentos = nuevosSegmentos;
+      
       setGrupos(nuevosGrupos);
   };
 
@@ -106,6 +110,13 @@ const NuevaCapacitacionPage = () => {
 
   const handleRemoveSegment = (groupIndex: number, segmentIndex: number) => {
       const nuevosGrupos = [...grupos];
+      
+      // No permitimos eliminar el único segmento de un grupo
+      if (nuevosGrupos[groupIndex].segmentos.length === 1) {
+          toast.error('Cada grupo debe tener al menos un día de programación.');
+          return;
+      }
+      
       nuevosGrupos[groupIndex].segmentos.splice(segmentIndex, 1);
       setGrupos(nuevosGrupos);
   };
@@ -169,7 +180,7 @@ const NuevaCapacitacionPage = () => {
         grupos: gruposPayload,
       };
       
-      // Tipamos la respuesta de la función para asegurar el ID
+      // Llamada al backend
       const newCapacitacion = await request<CreatedResource>(`/capacitaciones`, { 
         method: 'POST',
         body: finalPayload,
@@ -177,9 +188,7 @@ const NuevaCapacitacionPage = () => {
 
       toast.success('Capacitación creada con éxito.', { id: toastId });
       
-      // *** CORRECCIÓN CRÍTICA: Uso de Backticks (`) para Template Literal ***
-      //@ts-ignore
-      router.push(`/admin/capacitaciones/${newCapacitacion.id}`); 
+      router.push(`/admin/capacitaciones/${newCapacitacion!.id}`); 
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || 'Error al crear la capacitación.', { id: toastId });
@@ -200,7 +209,7 @@ const NuevaCapacitacionPage = () => {
             
             <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-md space-y-6">
             
-            {/* --- BLOQUE PRINCIPAL --- */}
+            {/* --- BLOQUE PRINCIPAL (Información General) --- */}
             <h2 className="text-xl font-bold text-gray-800">Información General</h2>
             <div className="space-y-4">
                 {/* Nombre y Modalidad */}
@@ -213,6 +222,7 @@ const NuevaCapacitacionPage = () => {
                         onChange={handleCapacitacionChange}
                         className="w-2/3 p-3 border border-gray-300 rounded-lg focus:ring-[#D80027] focus:border-[#D80027] text-gray-900" 
                         required
+                        disabled={loading}
                     />
                     <select
                         name="modalidad"
@@ -220,6 +230,7 @@ const NuevaCapacitacionPage = () => {
                         onChange={handleCapacitacionChange}
                         className="w-1/3 p-3 border border-gray-300 rounded-lg focus:ring-[#D80027] focus:border-[#D80027] text-gray-900" 
                         required
+                        disabled={loading}
                     >
                         <option value="Presencial">Presencial</option>
                         <option value="Online">Online</option>
@@ -236,6 +247,7 @@ const NuevaCapacitacionPage = () => {
                         onChange={handleCapacitacionChange}
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-[#D80027] focus:border-[#D80027] text-gray-900" 
                         required
+                        disabled={loading}
                     />
                 )}
                 
@@ -247,6 +259,7 @@ const NuevaCapacitacionPage = () => {
                     value={capacitacionData.instructor}
                     onChange={handleCapacitacionChange}
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-[#D80027] focus:border-[#D80027] text-gray-900"
+                    disabled={loading}
                 />
 
                 {/* Descripción */}
@@ -257,11 +270,12 @@ const NuevaCapacitacionPage = () => {
                     onChange={handleCapacitacionChange}
                     rows={4}
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-[#D80027] focus:border-[#D80027] text-gray-900"
+                    disabled={loading}
                 />
             </div>
 
             
-            {/* --- BLOQUE DE GRUPOS MÚLTIPLES (R4: Creación de Grupos con Segmentos) --- */}
+            {/* --- BLOQUE DE GRUPOS MÚLTIPLES (Fase 9.3: Creación con Segmentos) --- */}
             <div className="pt-6 border-t border-gray-200">
                 <h2 className="text-xl font-bold text-gray-800 mb-4">Grupos y Horarios por Día</h2>
                 
@@ -277,7 +291,7 @@ const NuevaCapacitacionPage = () => {
                             onClick={() => handleRemoveGroup(groupIndex)}
                             className="p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full"
                             title="Eliminar este grupo"
-                            disabled={grupos.length === 1}
+                            disabled={loading || grupos.length === 1}
                         >
                             <FiTrash2 size={18} />
                         </button>
@@ -290,10 +304,11 @@ const NuevaCapacitacionPage = () => {
                             type="number"
                             placeholder="Cupo Máximo"
                             value={grupo.cupoMaximo}
-                            onChange={(e) => handleGroupPropertyChange(groupIndex, 'cupoMaximo', e.target.value)}
+                            onChange={(e) => handleGroupPropertyChange(groupIndex, e.target.value)}
                             min="1"
                             className="p-3 border border-gray-300 rounded-lg text-gray-900 focus:ring-[#D80027] focus:border-[#D80027]"
                             required
+                            disabled={loading}
                         />
                     </div>
                     
@@ -314,6 +329,7 @@ const NuevaCapacitacionPage = () => {
                                     onChange={(e) => handleSegmentChange(groupIndex, segmentIndex, 'dia', e.target.value)}
                                     className="w-full p-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-blue-500 focus:border-blue-500 text-sm"
                                     required
+                                    disabled={loading}
                                 />
                             </div>
 
@@ -326,6 +342,7 @@ const NuevaCapacitacionPage = () => {
                                     onChange={(e) => handleSegmentChange(groupIndex, segmentIndex, 'horaInicio', e.target.value)}
                                     className="w-full p-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-blue-500 focus:border-blue-500 text-sm"
                                     required
+                                    disabled={loading}
                                 />
                             </div>
 
@@ -338,6 +355,7 @@ const NuevaCapacitacionPage = () => {
                                     onChange={(e) => handleSegmentChange(groupIndex, segmentIndex, 'horaFin', e.target.value)}
                                     className="w-full p-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-blue-500 focus:border-blue-500 text-sm"
                                     required
+                                    disabled={loading}
                                 />
                             </div>
                             
@@ -345,9 +363,9 @@ const NuevaCapacitacionPage = () => {
                             <button
                                 type="button"
                                 onClick={() => handleRemoveSegment(groupIndex, segmentIndex)}
-                                className="mt-3 p-2 text-red-600 hover:bg-red-100 rounded-lg h-full"
+                                className="mt-3 p-2 text-red-600 hover:bg-red-100 rounded-lg h-full self-start"
                                 title="Eliminar día de programación"
-                                disabled={grupo.segmentos.length === 1}
+                                disabled={loading || grupo.segmentos.length === 1}
                             >
                                 <FiTrash2 size={16} />
                             </button>
@@ -358,6 +376,7 @@ const NuevaCapacitacionPage = () => {
                         type="button"
                         onClick={() => handleAddSegment(groupIndex)}
                         className="w-full flex justify-center items-center py-2 px-4 border border-dashed border-gray-400 rounded-lg text-gray-600 hover:bg-gray-100 mt-4 text-sm"
+                        disabled={loading}
                     >
                         <FiPlus className="mr-2" />
                         Añadir Día / Segmento
@@ -370,6 +389,7 @@ const NuevaCapacitacionPage = () => {
                     onClick={handleAddGroup}
                     className="w-full flex justify-center items-center py-3 px-4 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200 mt-6 border border-gray-300"
                     title="Añadir un nuevo grupo para esta capacitación"
+                    disabled={loading}
                 >
                     <FiPlus className="mr-2" />
                     Añadir Nuevo Grupo
@@ -387,6 +407,7 @@ const NuevaCapacitacionPage = () => {
                     checked={capacitacionData.visible}
                     onChange={handleCapacitacionChange}
                     className="h-4 w-4 text-[#D80027] border-gray-300 rounded focus:ring-[#D80027]"
+                    disabled={loading}
                 />
                 <label htmlFor="visible" className="ml-2 block text-sm text-gray-900">
                     Visible en el catálogo público

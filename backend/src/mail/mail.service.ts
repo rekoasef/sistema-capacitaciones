@@ -3,17 +3,17 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import * as dotenv from 'dotenv';
+import { GrupoSegmento } from '@prisma/client'; // <-- IMPORTANTE: Nuevo tipo de Prisma
 
 dotenv.config();
 
-// Interfaz para el envío de correo de confirmación (R7)
+// Interfaz para el envío de correo de confirmación (R7 con Segmentos)
 interface EmailDetails {
   email: string;
   nombreUsuario: string;
   nombreCapacitacion: string;
-  fechaInicio: Date;
-  fechaFin: Date; // R1: Nuevo campo
-  ubicacion: string; // R6: Nuevo campo
+  segmentos: GrupoSegmento[]; // <-- CORRECCIÓN: Se añade el campo faltante (Soluciona Error 3)
+  ubicacion: string;
   concesionario: string | null;
 }
 
@@ -24,43 +24,60 @@ export class MailService {
 
   constructor() {
     this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587', 10),
-      secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+      host: process.env.MAIL_HOST,
+      port: parseInt(process.env.MAIL_PORT || '587', 10),
+      secure: process.env.MAIL_SECURE === 'true',
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS,
+      },
+      // Desactivar TLS para entornos de desarrollo si es necesario
+      tls: {
+        rejectUnauthorized: process.env.NODE_ENV !== 'development',
       },
     });
   }
 
-  // Helper para formatear fechas
-  private formatDateTime(date: Date): string {
+  // Helper para formatear solo la fecha (solo para el encabezado del email)
+  private formatDateOnly(date: Date): string {
     const dateOptions: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' };
-    const timeOptions: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
-    return `${date.toLocaleDateString('es-AR', dateOptions)} a las ${date.toLocaleTimeString('es-AR', timeOptions)} hs`;
+    return date.toLocaleDateString('es-AR', dateOptions);
   }
 
-  // Método para enviar el email de confirmación (R7)
+  // Método para enviar el email de confirmación (R7 con Segmentos)
   async sendConfirmationEmail(details: EmailDetails) {
-    const formattedInicio = this.formatDateTime(details.fechaInicio);
-    const formattedFin = this.formatDateTime(details.fechaFin);
-    
-    // Contenido del correo con la ubicación y la hora de fin (R7)
+
+    // Generar la lista HTML para todos los segmentos
+    const segmentosHtml = details.segmentos.map(segmento => {
+        // Usamos Intl.DateTimeFormat para el formato de fecha para el segmento
+        const dia = new Date(segmento.dia).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+        return `<li><strong>Día ${dia}:</strong> ${segmento.horaInicio} - ${segmento.horaFin} hs</li>`;
+    }).join('');
+
+    // Determinar la fecha de inicio/fin para el título (usando el primer y último segmento)
+    const fechaInicio = details.segmentos.length > 0 ? this.formatDateOnly(details.segmentos[0].dia) : 'N/A';
+    const fechaFin = details.segmentos.length > 0 ? this.formatDateOnly(details.segmentos[details.segmentos.length - 1].dia) : 'N/A';
+
+    // Contenido del correo con la ubicación y los segmentos
     const emailHtml = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px;">
         <h2 style="color: #D80027;">¡Inscripción Exitosa!</h2>
         <p>Hola ${details.nombreUsuario},</p>
         <p>Confirmamos tu inscripción a la siguiente capacitación:</p>
-        
+
         <div style="border-left: 4px solid #0056b3; padding-left: 15px; margin: 20px 0;">
           <h3 style="color: #0056b3; margin-top: 0;">${details.nombreCapacitacion}</h3>
+
+          <p><strong>Fechas del Curso (${fechaInicio} al ${fechaFin}):</strong></p>
+          <ul style="padding-left: 20px;">
+            ${segmentosHtml}
+          </ul>
+
           <p><strong>Ubicación:</strong> ${details.ubicacion}</p>
-          <p><strong>Comienzo:</strong> ${formattedInicio}</p>
-          <p><strong>Finalización:</strong> ${formattedFin}</p>
           ${details.concesionario ? `<p><strong>Concesionario:</strong> ${details.concesionario}</p>` : ''}
         </div>
-        
+
         <p>Por favor, guardá esta información. Si tenés alguna pregunta, contactanos.</p>
         <p>¡Te esperamos!</p>
         <p style="font-size: 0.9em; color: #777;">Equipo de Capacitaciones Crucianelli</p>

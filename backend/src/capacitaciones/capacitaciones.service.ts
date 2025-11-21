@@ -1,190 +1,207 @@
 // backend/src/capacitaciones/capacitaciones.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { CreateCapacitacionDto } from './dto/create-capacitacion.dto';
 import { UpdateCapacitacionDto } from './dto/update-capacitacion.dto';
-import * as Papa from 'papaparse';
-import { Prisma } from '@prisma/client'; 
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class CapacitacionesService {
   constructor(private prisma: PrismaService) {}
 
+  // Adaptado para manejar 'grupos' con 'segmentos' anidados.
   async create(createCapacitacionDto: CreateCapacitacionDto) {
-    const { grupos, ...capacitacionData } = createCapacitacionDto;
-    return this.prisma.$transaction(async (prisma) => {
-      const nuevaCapacitacion = await prisma.capacitacion.create({
-        data: {
-          ...capacitacionData,
-          visible: capacitacionData.visible ?? true, 
-        },
-      });
-      if (grupos && grupos.length > 0) {
-        // TAREA 9.2: Modificación de la CREACIÓN DE GRUPOS para segmentos
-        for (const grupoData of grupos) {
-             const { segmentos, ...rest } = grupoData;
-             await prisma.grupo.create({
-                data: {
-                    cupoMaximo: Number(grupoData.cupoMaximo),
-                    capacitacionId: nuevaCapacitacion.id,
-                    // Creación anidada de los segmentos
-                    segmentos: {
-                        create: segmentos.map(s => ({
-                            dia: new Date(s.dia), // Convertir a Date
-                            horaInicio: s.horaInicio,
-                            horaFin: s.horaFin,
-                        }))
-                    }
-                }
-             });
-        }
+    const { grupos, ...dataCapacitacion } = createCapacitacionDto;
+
+    // 1. Validaciones
+    if (!grupos || grupos.length === 0) {
+      throw new BadRequestException('Se debe especificar al menos un grupo.');
+    }
+
+    grupos.forEach((grupo, index) => {
+      if (!grupo.segmentos || grupo.segmentos.length === 0) {
+        throw new BadRequestException(
+          `El Grupo ${index + 1} debe tener al menos un segmento de día/hora.`,
+        );
       }
-      return nuevaCapacitacion;
+      if (grupo.cupoMaximo <= 0) {
+        throw new BadRequestException(
+          `El cupo máximo del Grupo ${index + 1} debe ser mayor a cero.`,
+        );
+      }
+    });
+
+    // 2. Preparar datos para Prisma (conversión de anidación)
+    const gruposData = grupos.map((grupo) => ({
+      cupoMaximo: grupo.cupoMaximo,
+      segmentos: {
+        create: grupo.segmentos.map((segmento) => ({
+          dia: new Date(segmento.dia), // Convertir a Date
+          horaInicio: segmento.horaInicio,
+          horaFin: segmento.horaFin,
+        })),
+      },
+    }));
+
+    // 3. Crear Capacitación y sus Grupos anidados
+    return this.prisma.capacitacion.create({
+      data: {
+        ...dataCapacitacion,
+        grupos: {
+          create: gruposData,
+        },
+      },
+      include: {
+        grupos: {
+          include: {
+            segmentos: true,
+          },
+        },
+      },
     });
   }
 
-  // FIX: Métodos findAll/findAllForAdmin añadidos
-  findAll() {
+  async findAll() {
     return this.prisma.capacitacion.findMany({
-      where: { visible: true }, 
+      include: {
+        grupos: {
+          include: {
+            inscripciones: true,
+            segmentos: { orderBy: { dia: 'asc' } },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  findAllForAdmin() {
-    return this.prisma.capacitacion.findMany({
-      orderBy: { createdAt: 'desc' }, 
-    });
-  }
-  // FIN FIX
-
-  // Helper para incluir segmentos y calcular el conteo de inscripciones
-  private async getCapacitacionWithSegments(where: Prisma.CapacitacionWhereUniqueInput) {
-    // Definimos el tipo de payload de Grupo para mapear correctamente
-    type GrupoWithSegments = Prisma.GrupoGetPayload<{
-      include: { 
-        _count: { select: { inscripciones: true } },
-        segmentos: { orderBy: { dia: 'asc' } },
-      };
-    }>;
-
-    const capacitacion = await this.prisma.capacitacion.findUnique({
-      where,
-      // Usamos as any para evitar el error TS2353/TS2339 después de la regeneración
-      include: {
-        grupos: {
-          orderBy: { id: 'asc' },
-          include: {
-            _count: { select: { inscripciones: true } },
-            segmentos: { orderBy: { dia: 'asc' } },
-          },
-        } as any, 
-      },
-    });
-
-    if (!capacitacion) return null;
-
-    // Mapear para aplanar el conteo y calcular las fechas derivadas
-    const gruposMapeados = (capacitacion.grupos as GrupoWithSegments[]).map(grupo => {
-        const segmentosOrdenados = grupo.segmentos.sort((a, b) => new Date(a.dia).getTime() - new Date(b.dia).getTime());
-        
-        const fechaInicio = segmentosOrdenados[0]?.dia;
-        const fechaFin = segmentosOrdenados[segmentosOrdenados.length - 1]?.dia;
-        
-        return {
-            ...grupo,
-            inscripcionesCount: grupo._count.inscripciones,
-            fechaInicio, 
-            fechaFin,    
-        };
-    });
-
-    return { ...capacitacion, grupos: gruposMapeados };
-  }
-
   async findOne(id: number) {
-    const capacitacion = await this.getCapacitacionWithSegments({ id, visible: true });
-    if (!capacitacion) {
-      throw new NotFoundException(
-        `Capacitación con ID ${id} no encontrada o no está visible.`,
-      );
-    }
-    return capacitacion;
-  }
-
-  async findOneForAdmin(id: number) {
-    const capacitacion = await this.getCapacitacionWithSegments({ id });
-    if (!capacitacion) {
-      throw new NotFoundException(`La capacitación con ID ${id} no fue encontrada.`);
-    }
-    return capacitacion;
-  }
-
-  remove(id: number) {
-    return this.prisma.$transaction(async (prisma) => {
-      // 1. Borrar Segmentos
-      await prisma.grupoSegmento.deleteMany({ // FIX: Usa prisma.grupoSegmento
-        where: { grupo: { capacitacionId: id } },
-      });
-      // 2. Borrar Inscripciones
-      await prisma.inscripcion.deleteMany({
-        where: { grupo: { capacitacionId: id } },
-      });
-      // 3. Borrar Grupos
-      await prisma.grupo.deleteMany({
-        where: { capacitacionId: id },
-      });
-      // 4. Borrar Capacitación
-      return prisma.capacitacion.delete({
-        where: { id },
-      });
-    });
-  }
-
-  async exportCapacitacionToCsv(id: number): Promise<string> {
     const capacitacion = await this.prisma.capacitacion.findUnique({
       where: { id },
+      include: {
+        grupos: {
+          include: {
+            inscripciones: true,
+            segmentos: { orderBy: { dia: 'asc' } },
+          },
+        },
+      },
     });
+
     if (!capacitacion) {
-      throw new NotFoundException(`La capacitación con ID ${id} no existe.`);
+      throw new NotFoundException(`Capacitación con ID ${id} no encontrada.`);
     }
-    const inscripciones = await this.prisma.inscripcion.findMany({
+    return capacitacion;
+  }
+
+  // RE-IMPLEMENTACIÓN DE UPDATE (SOLUCIONA ERROR TS2339)
+  async update(id: number, updateCapacitacionDto: UpdateCapacitacionDto) {
+    // Nota: La gestión compleja de `grupos` y `segmentos` anidados
+    // durante una actualización (PATCH) será abordada completamente
+    // en la Fase 9.3/9.4. Por ahora, solo permitimos actualizar los
+    // campos principales de la Capacitación.
+    const { grupos, ...dataCapacitacion } = updateCapacitacionDto;
+
+    try {
+      // Actualizar la Capacitación (campos principales)
+      const updatedCapacitacion = await this.prisma.capacitacion.update({
+        where: { id },
+        data: dataCapacitacion,
+      });
+
+      // Si se enviaron datos de grupos, ignoramos la actualización de grupos/segmentos
+      // ya que este endpoint no está diseñado para manejar esa complejidad.
+      if (grupos) {
+        console.warn(
+          'ADVERTENCIA: Se ignoraron los datos de grupos/segmentos. La gestión de grupos debe hacerse a través de endpoints específicos (ej: grupos.controller.ts) o se implementará lógica de diffing en Fase 9.4.',
+        );
+      }
+
+      return updatedCapacitacion;
+    } catch (error: any) {
+      if (error.code === 'P2025') {
+        throw new NotFoundException(`Capacitación con ID ${id} no encontrada.`);
+      }
+      throw error;
+    }
+  }
+
+  async remove(id: number) {
+    // Al eliminar una capacitación, se usa la eliminación en cascada
+    // (ON DELETE CASCADE) para grupos, segmentos e inscripciones.
+    try {
+      return await this.prisma.capacitacion.delete({
+        where: { id },
+      });
+    } catch (error: any) {
+      if (error.code === 'P2025') {
+        throw new NotFoundException(`Capacitación con ID ${id} no encontrada.`);
+      }
+      throw error;
+    }
+  }
+
+  // Actualizado para usar la nueva estructura de Segmentos para filtrar por fecha futura
+  async findPublicCapacitaciones() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Para comparar solo la fecha
+
+    const capacitaciones = await this.prisma.capacitacion.findMany({
       where: {
-        grupo: {
-          capacitacionId: id,
+        visible: true,
+        grupos: {
+          some: {
+            // Un grupo es visible si tiene al menos un segmento en el futuro (o hoy)
+            segmentos: {
+              some: {
+                dia: {
+                  gte: today.toISOString(),
+                },
+              },
+            },
+          },
         },
       },
       include: {
-        grupo: {
-            include: {
-                segmentos: { orderBy: { dia: 'asc' } } 
-            }
+        grupos: {
+          where: {
+            // Filtro de grupos: sólo los que tengan segmentos futuros
+            segmentos: {
+              some: {
+                dia: {
+                  gte: today.toISOString(),
+                },
+              },
+            },
+          },
+          include: {
+            inscripciones: {
+              select: { id: true },
+            },
+            segmentos: {
+              orderBy: { dia: 'asc' },
+            },
+          },
         },
-        concesionario: true,
       },
-    });
-    
-    if (inscripciones.length === 0) {
-      return 'No hay inscriptos en esta capacitación para exportar.';
-    }
-
-    const dataParaCsv = inscripciones.map((insc) => {
-        const segmentosTexto = insc.grupo.segmentos.map((s, index) => {
-            const dia = new Date(s.dia).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            return `Día ${index + 1}: ${dia} (${s.horaInicio}-${s.horaFin})`;
-        }).join('; ');
-
-        return {
-          Nombre_Participante: insc.nombreUsuario,
-          Email_Participante: insc.emailUsuario,
-          Telefono: insc.telefono || 'N/A',
-          Concesionario: insc.concesionario?.nombre || 'N/A',
-          Capacitacion: capacitacion.nombre,
-          Detalle_Horarios: segmentosTexto, 
-          Fecha_Inscripcion: new Date(insc.createdAt).toLocaleString('es-AR'),
-        }
+      orderBy: { createdAt: 'desc' },
     });
 
-    return Papa.unparse(dataParaCsv);
+    // Filtrar en memoria para asegurar que sólo se muestren los grupos con cupo disponible
+    return capacitaciones
+      .map((cap) => ({
+        ...cap,
+        grupos: cap.grupos
+          .map((grupo) => ({
+            ...grupo,
+            cupoRestante: grupo.cupoMaximo - grupo.inscripciones.length,
+          }))
+          .filter((grupo) => grupo.cupoRestante > 0),
+      }))
+      .filter((cap) => cap.grupos.length > 0); // Ocultar capacitaciones que ya no tengan grupos disponibles
   }
 }

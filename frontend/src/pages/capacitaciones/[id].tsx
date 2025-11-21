@@ -5,7 +5,7 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 // Se añade FiClock para mostrar los segmentos
-import { FiCalendar, FiMapPin, FiInfo, FiHome, FiRefreshCw, FiClock } from 'react-icons/fi';
+import { FiCalendar, FiMapPin, FiInfo, FiHome, FiRefreshCw, FiClock, FiUsers } from 'react-icons/fi';
 import type { InferGetServerSidePropsType, GetServerSideProps } from 'next';
 import toast from 'react-hot-toast';
 import { useApi } from '@/hooks/useApi';
@@ -13,10 +13,10 @@ import nookies from 'nookies';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
 
-// --- INTERFACES DE LA FASE 9.0 ---
+// --- INTERFACES DE LA FASE 9.4 ---
 
 interface GrupoSegmento {
-    id?: number; 
+    id: number;
     dia: string; // YYYY-MM-DD
     horaInicio: string; // HH:MM
     horaFin: string; // HH:MM
@@ -24,12 +24,9 @@ interface GrupoSegmento {
 
 interface Grupo {
   id: number;
-  // TAREA 9.4: Las fechas ahora son opcionales/derivadas
-  fechaInicio?: string; 
-  fechaFin?: string;
   cupoMaximo: number;
   inscripcionesCount: number; 
-  segmentos: GrupoSegmento[]; // Nuevo campo clave
+  segmentos: GrupoSegmento[]; // Nueva estructura
 }
 interface Capacitacion {
   id: number;
@@ -51,10 +48,11 @@ type PageProps = {
 
 // --- HELPERS ---
 
-// Helper para formatear solo la fecha (YYYY-MM-DD)
-const formatDateOnly = (dateString?: string): string => {
+// Helper para formatear solo la fecha (DD/MM/YYYY)
+const formatDateOnly = (dateString: string): string => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
+    // Usamos el toLocaleDateString con options para formato consistente
     const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' };
     return date.toLocaleDateString('es-AR', options);
 };
@@ -78,7 +76,7 @@ export default function DetalleCapacitacionPage({
     nombreUsuario: '',
     emailUsuario: '',
     telefono: '',
-    grupoId: capacitacion?.grupos.length && (capacitacion.grupos[0].cupoMaximo - capacitacion.grupos[0].inscripcionesCount > 0) 
+    grupoId: capacitacion?.grupos.length && (capacitacion.grupos[0].cupoMaximo - (capacitacion.grupos[0] as any).inscripciones.length > 0) 
       ? capacitacion.grupos[0].id.toString() 
       : '',
     concesionarioId: '',
@@ -86,7 +84,7 @@ export default function DetalleCapacitacionPage({
 
 
   // --- RETORNOS CONDICIONALES ---
-  if (initialError) return <div className="p-4 text-red-500 bg-red-100 rounded-lg max-w-4xl mx-auto my-8">{localError}</div>;
+  if (localError) return <div className="p-4 text-red-500 bg-red-100 rounded-lg max-w-4xl mx-auto my-8">{localError}</div>;
   if (!capacitacion) return <div className="p-4 max-w-4xl mx-auto my-8">Cargando o Capacitación no encontrada...</div>;
   
   
@@ -110,17 +108,18 @@ export default function DetalleCapacitacionPage({
         emailUsuario: formData.emailUsuario,
         telefono: formData.telefono,
         grupoId: parseInt(formData.grupoId),
+        // Si no se selecciona concesionario, enviamos 0 que el backend maneja como nulo/opcional
         concesionarioId: formData.concesionarioId ? parseInt(formData.concesionarioId) : 0, 
+        informacionAdicional: '', // Se mantiene vacío por ahora
       };
 
-      // Se usa request<any> para simplificar la llamada
-      const newInscripcion = await request<any>(`/inscripciones`, { 
+      await request<any>(`/inscripciones`, { 
         method: 'POST', 
         body: payload, 
         isPublic: true
       });
       
-      toast.success('¡Inscripción exitosa! Redirigiendo...', { id: toastId });
+      toast.success('¡Inscripción exitosa! Revisa tu correo.', { id: toastId });
       
       router.push(`/inscripcion/exito?c_id=${id}`); 
 
@@ -128,6 +127,18 @@ export default function DetalleCapacitacionPage({
       const message = err.message || 'Error desconocido al inscribirse.';
       toast.error(message, { id: toastId });
     }
+  };
+  
+  // Calcular la fecha de inicio y fin del grupo para mostrar en el selector
+  const getGroupDateRange = (group: Grupo) => {
+    if (group.segmentos.length === 0) return 'Sin fechas';
+    
+    // Asumimos que los segmentos vienen ordenados por día del backend
+    const inicio = formatDateOnly(group.segmentos[0].dia);
+    const fin = formatDateOnly(group.segmentos[group.segmentos.length - 1].dia);
+    
+    // Si es un solo día, mostrarlo una sola vez
+    return inicio === fin ? inicio : `${inicio} al ${fin}`;
   };
 
 
@@ -143,7 +154,8 @@ export default function DetalleCapacitacionPage({
             <Link href="/" className="text-xl font-bold text-gray-800 hover:text-blue-600 transition-colors">
                 &larr; Volver al Catálogo
             </Link>
-            <img src="/logo.jpg" alt="Crucianelli Logo" className="h-10" />
+            {/* FIX: Se mantiene la etiqueta <img> para evitar conflictos con next/image en Docker/Vercel (aunque con warning) */}
+            <img src="/logo.jpg" alt="Crucianelli Logo" className="h-10" /> 
         </div>
       </header>
 
@@ -185,7 +197,9 @@ export default function DetalleCapacitacionPage({
                     {capacitacion.grupos.length > 0 ? ( 
                         <div className="space-y-4">
                             {capacitacion.grupos.map(grupo => {
-                                const cupoDisponible = grupo.cupoMaximo - grupo.inscripcionesCount;
+                                // El backend ahora devuelve los grupos ya filtrados por visibilidad y futuro (en findPublicCapacitaciones)
+                                // y trae el cupoRestante directamente en el mapeo del service.
+                                const cupoDisponible = (grupo as any).cupoRestante; // Acceso directo al campo calculado
                                 const isFull = cupoDisponible <= 0;
                                 return (
                                     <div key={grupo.id} className={`p-4 rounded-lg border flex flex-col justify-between ${isFull ? 'bg-red-50 border-red-200 opacity-70' : 'bg-green-50 border-green-200'}`}>
@@ -197,8 +211,8 @@ export default function DetalleCapacitacionPage({
                                                 Programación:
                                             </h3>
                                             <ul className="text-sm text-gray-700 space-y-1 pl-2">
-                                                {grupo.segmentos.map((segmento, i) => (
-                                                    <li key={i} className="flex items-center">
+                                                {grupo.segmentos.map((segmento) => (
+                                                    <li key={segmento.id} className="flex items-center">
                                                         <FiClock className="w-3 h-3 mr-2 text-gray-600" />
                                                         **{formatDateOnly(segmento.dia)}:** {segmento.horaInicio} - {segmento.horaFin} hs
                                                     </li>
@@ -218,7 +232,7 @@ export default function DetalleCapacitacionPage({
                             })}
                         </div>
                     ) : (
-                        <p className="text-gray-500">Aún no hay grupos programados para esta capacitación.</p>
+                        <p className="text-gray-500">Aún no hay grupos programados o disponibles para esta capacitación.</p>
                     )}
                 </section>
             </div>
@@ -230,7 +244,7 @@ export default function DetalleCapacitacionPage({
                     
                     <form onSubmit={handleSubmit} className="space-y-4">
                         
-                        {/* (El resto del formulario se mantiene igual) */}
+                        {/* Nombre */}
                         <div>
                             <label htmlFor="nombreUsuario" className="block text-sm font-medium text-gray-700">Nombre y Apellido *</label>
                             <div className="mt-1 relative rounded-md shadow-sm">
@@ -243,10 +257,12 @@ export default function DetalleCapacitacionPage({
                                     onChange={handleChange}
                                     className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
                                     placeholder="Ej: Juan Pérez"
+                                    disabled={loading}
                                 />
                             </div>
                         </div>
 
+                        {/* Email */}
                         <div>
                             <label htmlFor="emailUsuario" className="block text-sm font-medium text-gray-700">Email *</label>
                             <div className="mt-1 relative rounded-md shadow-sm">
@@ -259,10 +275,12 @@ export default function DetalleCapacitacionPage({
                                     onChange={handleChange}
                                     className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
                                     placeholder="ejemplo@correo.com"
+                                    disabled={loading}
                                 />
                             </div>
                         </div>
 
+                        {/* Teléfono */}
                         <div>
                             <label htmlFor="telefono" className="block text-sm font-medium text-gray-700">Teléfono (Opcional)</label>
                             <div className="mt-1 relative rounded-md shadow-sm">
@@ -274,6 +292,7 @@ export default function DetalleCapacitacionPage({
                                     onChange={handleChange}
                                     className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
                                     placeholder="Ej: 11 5555 6666"
+                                    disabled={loading}
                                 />
                             </div>
                         </div>
@@ -288,10 +307,11 @@ export default function DetalleCapacitacionPage({
                                 value={formData.grupoId}
                                 onChange={handleChange}
                                 className="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base border focus:border-blue-500 focus:outline-none focus:ring-blue-500 text-gray-700"
+                                disabled={loading}
                             >
                                 <option value="">Seleccione una fecha...</option>
                                 {capacitacion.grupos.map(grupo => {
-                                    const cupoDisponible = grupo.cupoMaximo - grupo.inscripcionesCount;
+                                    const cupoDisponible = (grupo as any).cupoRestante;
                                     const isFull = cupoDisponible <= 0;
                                     return (
                                         <option 
@@ -299,8 +319,7 @@ export default function DetalleCapacitacionPage({
                                             value={grupo.id} 
                                             disabled={isFull} 
                                         >
-                                            {/* Mostrar rango de fechas derivado para el selector */}
-                                            {formatDateOnly(grupo.fechaInicio)} al {formatDateOnly(grupo.fechaFin)} - {isFull ? ' (Completo)' : ` (${cupoDisponible} libres)`}
+                                            {getGroupDateRange(grupo)} - {isFull ? ' (Completo)' : ` (${cupoDisponible} libres)`}
                                         </option>
                                     );
                                 })}
@@ -316,6 +335,7 @@ export default function DetalleCapacitacionPage({
                                 value={formData.concesionarioId}
                                 onChange={handleChange}
                                 className="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base border focus:border-blue-500 focus:outline-none focus:ring-blue-500 text-gray-700"
+                                disabled={loading}
                             >
                                 <option value="">(Ninguno / No aplica)</option>
                                 {concesionarios.map(concesionario => (
@@ -329,8 +349,8 @@ export default function DetalleCapacitacionPage({
                         {/* Botón de Submit */}
                         <button
                             type="submit"
-                            disabled={loading}
-                            className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white ${loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors'}`}
+                            disabled={loading || capacitacion.grupos.length === 0}
+                            className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white ${loading || capacitacion.grupos.length === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors'}`}
                         >
                             {loading ? 'Inscribiendo...' : 'Inscribirse Ahora'}
                         </button>
@@ -348,15 +368,16 @@ export default function DetalleCapacitacionPage({
   );
 }
 
-// getServerSideProps (Se mantiene igual)
+// getServerSideProps (Se actualiza para llamar al endpoint público que filtra)
 export const getServerSideProps: GetServerSideProps<PageProps> = async (context) => {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
   context.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   const { id } = context.params!; 
   try {
-    // El backend ahora devuelve los grupos con segmentos anidados (TAREA 9.2)
+    // Llama al nuevo endpoint público del servicio, que ya filtra por visibilidad y grupos futuros
     const resCap = await fetch(`${API_BASE_URL}/api/capacitaciones/${id}`);
     
+    // Llamada al endpoint público de concesionarios
     const resCon = await fetch(`${API_BASE_URL}/api/concesionarios`);
 
     if (resCap.status === 404) {
