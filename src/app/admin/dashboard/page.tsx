@@ -1,67 +1,50 @@
-import { createClient } from '@/lib/supabase/server'; // Ruta relativa
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
-import AdminNavbar from '@/components/ui/AdminNavbar'; // Importado para el FIX de arquitectura
+import { LayoutDashboard } from 'lucide-react';
+import AdminNavbar from '@/components/ui/AdminNavbar';
+import { createClient } from '@/lib/supabase/server';
+import { getDashboardStats } from '@/lib/services/dashboard.service';
+// Este componente lo crearemos en el siguiente paso
+import DashboardStats from '@/components/admin/dashboard/DashboardStats';
 
-// Este es un Server Component que se encarga de mostrar la información principal
+// Forzamos dinamismo para ver métricas en tiempo real al entrar
+export const dynamic = 'force-dynamic';
+
 export default async function AdminDashboardPage() {
-  // Obtenemos el cliente Supabase del lado del servidor
   const supabase = createClient();
   
-  // Nivel de Seguridad 1: Verificar la sesión (Aunque el middleware lo hace, es una buena práctica aquí)
+  // 1. Verificación de Sesión
   const { data: { session } } = await supabase.auth.getSession();
-  
   if (!session) {
     redirect('/admin/login');
   }
 
-  // Obtenemos el email del usuario para el saludo en el dashboard
+  // 2. Obtención de Métricas (Backend)
+  const stats = await getDashboardStats();
   const userEmail = session.user.email;
 
   return (
     <>
-      {/* FIX ARQUITECTÓNICO: Se incluye el AdminNavbar aquí para que no aparezca
-        en el /admin/login (ya que fue eliminado del /admin/layout.tsx).
-      */}
       <AdminNavbar />
-
-      {/* Contenedor principal del Dashboard */}
-      <div className="p-6 bg-white rounded-xl shadow-lg mt-4"> 
-        <h1 className="text-3xl font-bold text-crucianelli-secondary mb-6">
-          Bienvenido al Dashboard, {userEmail}!
-        </h1>
+      
+      <div className="container mx-auto px-4 py-8 bg-gray-50 min-h-[calc(100vh-64px)]">
         
-        <p className="text-gray-700 mb-4">
-          Este es el panel central de control del sistema de capacitaciones Crucianelli.
-        </p>
-
-        {/* Módulos principales del sistema */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-          
-          {/* Tarjeta 1: Capacitaciones */}
-          <Link href="/admin/capacitaciones" className="group block">
-              <div className="bg-crucianelli-primary text-white p-6 rounded-lg shadow-md hover:shadow-xl transition duration-300 transform group-hover:scale-[1.02]">
-                  <h2 className="text-xl font-semibold mb-2">Capacitaciones</h2>
-                  <p>Gestionar cursos, fechas y contenido.</p>
-              </div>
-          </Link>
-          
-          {/* Tarjeta 2: Inscripciones (PENDIENTE) */}
-          <Link href="/admin/inscripciones" className="group block">
-              <div className="bg-crucianelli-secondary text-white p-6 rounded-lg shadow-md hover:shadow-xl transition duration-300 transform group-hover:scale-[1.02]">
-                  <h2 className="text-xl font-semibold mb-2">Inscripciones</h2>
-                  <p>Revisar y gestionar los registros de usuarios.</p>
-              </div>
-          </Link>
-          
-          {/* Tarjeta 3: Concesionarios */}
-          <Link href="/admin/concesionarios" className="group block">
-              <div className="bg-gray-700 text-white p-6 rounded-lg shadow-md hover:shadow-xl transition duration-300 transform group-hover:scale-[1.02]">
-                  <h2 className="text-xl font-semibold mb-2">Concesionarios</h2>
-                  <p>Administrar la lista de concesionarios autorizados.</p>
-              </div>
-          </Link>
+        {/* Encabezado del Dashboard */}
+        <div className="flex items-center mb-8">
+            <div className="p-3 bg-white border border-gray-200 rounded-lg mr-4 shadow-sm">
+                <LayoutDashboard className="w-8 h-8 text-crucianelli-secondary" />
+            </div>
+            <div>
+                <h1 className="text-2xl font-bold text-gray-800">Panel de Control</h1>
+                <p className="text-gray-500 text-sm">
+                    Sesión activa como: <span className="font-medium text-crucianelli-primary">{userEmail}</span>
+                </p>
+            </div>
         </div>
+
+        {/* 3. Renderizado de la Vista de Métricas */}
+        {/* Pasamos los datos calculados al componente visual */}
+        <DashboardStats stats={stats} />
+        
       </div>
     </>
   );

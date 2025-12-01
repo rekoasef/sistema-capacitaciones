@@ -1,5 +1,4 @@
-/** @type {import('tailwindcss').Config} */
-const config = {
+const config = { // El archivo comienza directamente con 'const'
   // Asegura el escaneo de archivos en la estructura /src y raíz
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',

@@ -5,14 +5,12 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Save, Loader2, XCircle } from 'lucide-react';
-import { createConcesionarioAction, updateConcesionarioAction } from '@/lib/actions/concesionario.actions'; // Ruta relativa
-import Modal from '@/components/ui/Modal'; // Ruta relativa
-import { Database } from '@/types/supabase'; // Ruta relativa
+import { createConcesionarioAction, updateConcesionarioAction } from '@/lib/actions/concesionario.actions';
+import Modal from '@/components/ui/Modal';
+import { Database } from '@/types/supabase';
 
-// Tipo para la fila de concesionarios (simplificado para el form)
 type Concesionario = Database['public']['Tables']['concesionarios']['Row'];
 
-// Definición de tipos para el formulario (usando Zod para el esquema)
 const FormSchema = z.object({
   id: z.coerce.number().optional(), 
   nombre: z.string().min(3, 'El nombre debe tener al menos 3 caracteres.'),
@@ -21,11 +19,11 @@ const FormSchema = z.object({
 type FormInputs = z.infer<typeof FormSchema>;
 
 interface ConcesionarioFormProps {
-  concesionario?: Concesionario; // Opcional: si se pasa, es modo Edición
-  onSuccess: () => void;
+  concesionario?: Concesionario;
+  // FIX: Hacemos esta prop OPCIONAL para no obligar al Server Component a enviarla
+  onSuccess?: () => void; 
 }
 
-// Componente que contiene el botón de apertura y el modal del formulario
 export default function ConcesionarioForm({ concesionario, onSuccess }: ConcesionarioFormProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -35,7 +33,7 @@ export default function ConcesionarioForm({ concesionario, onSuccess }: Concesio
   const modalTitle = isEditMode ? `Editar: ${concesionario?.nombre}` : 'Crear Nuevo Concesionario';
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormInputs>({
-    //@ts-ignore
+    // @ts-ignore
     resolver: zodResolver(FormSchema),
     defaultValues: {
       id: concesionario?.id,
@@ -43,7 +41,6 @@ export default function ConcesionarioForm({ concesionario, onSuccess }: Concesio
     },
   });
 
-  // Resetear el formulario cuando se cambia de modo o el modal se abre
   useEffect(() => {
     reset({
       id: concesionario?.id,
@@ -52,37 +49,30 @@ export default function ConcesionarioForm({ concesionario, onSuccess }: Concesio
     setSubmitError(null);
   }, [concesionario, isOpen, reset]);
 
-  // Manejador de envío del formulario (Tipificación simplificada con FormInputs)
   const onSubmit = async (data: FormInputs) => {
     setIsSubmitting(true);
     setSubmitError(null);
     
-    // 1. Crear FormData para el Server Action
     const formData = new FormData();
     formData.append('nombre', data.nombre);
     if (data.id) {
         formData.append('id', data.id.toString());
     }
 
-    // 2. Llamar al Server Action (Crear o Actualizar)
     const action = isEditMode ? updateConcesionarioAction : createConcesionarioAction;
-    
-    // Llamada al Server Action
     const result = await action(null, formData); 
 
     if (!result.success) {
-      // Manejar error de backend (ej: nombre duplicado, no autorizado, etc.)
       setSubmitError(result.message || 'Ocurrió un error inesperado al guardar.');
     } else {
-      // Éxito: Cerrar modal y notificar al componente padre
-      onSuccess();
+      // FIX: Solo llamamos a onSuccess si fue provisto
+      if (onSuccess) onSuccess();
       setIsOpen(false);
     }
     
     setIsSubmitting(false);
   };
 
-  // Botón para abrir el modal (depende del modo: Crear o Editar)
   const renderOpenButton = () => {
     if (isEditMode) {
       return (
@@ -112,15 +102,13 @@ export default function ConcesionarioForm({ concesionario, onSuccess }: Concesio
       {renderOpenButton()}
 
       <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title={modalTitle}>
-        {/* @ts-ignore */}
+        {/*@ts-ignore*/}
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           
-          {/* Campo Oculto para ID (solo en modo edición) */}
           {isEditMode && (
             <input type="hidden" {...register('id')} />
           )}
 
-          {/* Campo Nombre */}
           <div>
             <label htmlFor="nombre" className="block text-sm font-medium text-gray-700 mb-1">
               Nombre del Concesionario
@@ -138,7 +126,6 @@ export default function ConcesionarioForm({ concesionario, onSuccess }: Concesio
             {errors.nombre && <p className="mt-1 text-sm text-red-500 flex items-center"><XCircle className="h-4 w-4 mr-1"/>{errors.nombre.message}</p>}
           </div>
 
-          {/* Mensaje de Error (Backend / Server Action) */}
           {submitError && (
             <div className="p-3 text-sm text-red-700 bg-red-100 border border-red-200 rounded-lg font-medium flex items-center">
               <XCircle className="h-5 w-5 mr-2 flex-shrink-0" />
@@ -146,7 +133,6 @@ export default function ConcesionarioForm({ concesionario, onSuccess }: Concesio
             </div>
           )}
 
-          {/* Botón de Submit */}
           <div className="pt-4 border-t border-gray-100 flex justify-end">
             <button
               type="submit"

@@ -1,54 +1,52 @@
-import { getConcesionarios } from '@/lib/services/concesionario.service'; // FIX: Ruta relativa
-import ConcesionarioTable from '@/components/admin/concesionarios/ConcesionarioTable'; // FIX: Ruta relativa
-import ConcesionarioForm from '@/components/admin/concesionarios/ConcesionarioForm'; // FIX: Ruta relativa
-import { isSuperAdmin } from '@/lib/utils/auth.utils'; // FIX: Ruta relativa
-import { redirect } from 'next/navigation';
+import { getConcesionarios } from '@/lib/services/concesionario.service';
+import ConcesionarioTable from '@/components/admin/concesionarios/ConcesionarioTable';
+import ConcesionarioForm from '@/components/admin/concesionarios/ConcesionarioForm';
+import { isSuperAdmin } from '@/lib/utils/auth.utils';
 import { AlertTriangle } from 'lucide-react';
+import AdminNavbar from '@/components/ui/AdminNavbar'; // Agregamos Navbar aquí también para consistencia
 
-// Esta página es un Server Component que maneja la carga de datos.
+export const dynamic = 'force-dynamic';
+
 export default async function ConcesionariosPage() {
     
-    // 1. Autorización: Verificación de Rol (Nivel de seguridad Server Component)
+    // 1. Autorización
     const hasAccess = await isSuperAdmin();
     
-    // Si no es SuperAdmin, redirigir al dashboard o mostrar error de acceso
     if (!hasAccess) {
-        // En un futuro podríamos tener un rol 'Auditor' que solo lee.
-        // Por ahora, solo SuperAdmin tiene acceso a esta ruta.
         return (
-            <div className="p-6 bg-white rounded-xl shadow-lg text-center">
+            <div className="p-6 bg-white rounded-xl shadow-lg text-center mt-10 mx-auto max-w-md">
                 <AlertTriangle className="h-10 w-10 text-red-500 mx-auto mb-4" />
                 <h1 className="text-2xl font-bold text-red-600">Acceso Denegado</h1>
-                <p className="text-gray-600 mt-2">No tienes los permisos necesarios (SuperAdmin) para acceder a este módulo.</p>
+                <p className="text-gray-600 mt-2">No tienes permisos para ver esto.</p>
             </div>
         );
     }
 
     // 2. Carga de datos
-    // La RLS de Supabase garantiza que solo los SuperAdmins puedan leer estos datos.
     const concesionarios = await getConcesionarios();
 
-    // 3. Renderizado de UI
+    // 3. Renderizado
     return (
         <>
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold text-crucianelli-secondary">
-                    Gestión de Concesionarios
-                </h1>
-                
-                {/* Botón de Nuevo Concesionario (abre el modal de Creación) */}
-                {/* El Server Component renderiza el Client Component del formulario */}
-                <ConcesionarioForm 
-                    // No pasamos concesionario para el modo Creación
-                    onSuccess={() => {}} // La acción ya refresca la página
-                />
-            </div>
-
-            <ConcesionarioTable concesionarios={concesionarios} />
+            <AdminNavbar />
             
-            <p className="mt-4 text-sm text-gray-500 italic">
-                Nota: La eliminación de un concesionario fallará si tiene inscripciones asociadas (Restricción de FK).
-            </p>
+            {/* Contenedor principal de la página */}
+            <div className="container mx-auto px-4 py-8">
+                <div className="flex justify-between items-center mb-6">
+                    <h1 className="text-3xl font-bold text-crucianelli-secondary">
+                        Gestión de Concesionarios
+                    </h1>
+                    
+                    {/* CRÍTICO: Aquí estaba el error. Llamamos al componente SIN props de función. */}
+                    <ConcesionarioForm />
+                </div>
+
+                <ConcesionarioTable concesionarios={concesionarios} />
+                
+                <p className="mt-4 text-sm text-gray-500 italic">
+                    Nota: No se pueden eliminar concesionarios que tengan alumnos inscriptos.
+                </p>
+            </div>
         </>
     );
 }

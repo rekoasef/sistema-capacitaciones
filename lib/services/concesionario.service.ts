@@ -11,7 +11,7 @@ type ConcesionarioUpdate = Database['public']['Tables']['concesionarios']['Updat
 // ====================================================================
 
 /**
- * Obtiene todos los concesionarios (protegido por RLS).
+ * Obtiene todos los concesionarios (PANEL ADMIN).
  */
 export async function getConcesionarios(): Promise<Concesionario[]> {
     const supabase = createClient();
@@ -24,6 +24,46 @@ export async function getConcesionarios(): Promise<Concesionario[]> {
     if (error) {
         console.error('Error al obtener concesionarios:', error.message);
         throw new Error('Fallo al cargar la lista de concesionarios.');
+    }
+
+    return data as Concesionario[];
+}
+
+/**
+ * Obtiene un concesionario por su ID (NUEVO).
+ * Necesario para la página de detalles /admin/concesionarios/[id]
+ */
+export async function getConcesionarioById(id: number): Promise<Concesionario | null> {
+    const supabase = createClient();
+
+    const { data, error } = await supabase
+        .from('concesionarios')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+    if (error) {
+        console.error(`Error al obtener concesionario ${id}:`, error.message);
+        return null;
+    }
+
+    return data as Concesionario;
+}
+
+/**
+ * Obtiene lista simplificada de concesionarios para el FORMULARIO PÚBLICO.
+ */
+export async function getConcesionariosPublicos(): Promise<Concesionario[]> {
+    const supabase = createClient();
+    
+    const { data, error } = await supabase
+        .from('concesionarios')
+        .select('id, nombre')
+        .order('nombre', { ascending: true });
+
+    if (error) {
+        console.error('Error al cargar concesionarios públicos:', error.message);
+        return [];
     }
 
     return data as Concesionario[];
