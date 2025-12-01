@@ -131,7 +131,7 @@ export type Database = {
       }
       inscripciones: {
         Row: {
-          asistencia_marcada: boolean
+          asistencia_marcada: string
           concesionario_id: number | null
           created_at: string | null
           email_inscripto: string
@@ -141,7 +141,7 @@ export type Database = {
           telefono: string | null
         }
         Insert: {
-          asistencia_marcada?: boolean
+          asistencia_marcada?: string
           concesionario_id?: number | null
           created_at?: string | null
           email_inscripto: string
@@ -151,7 +151,7 @@ export type Database = {
           telefono?: string | null
         }
         Update: {
-          asistencia_marcada?: boolean
+          asistencia_marcada?: string
           concesionario_id?: number | null
           created_at?: string | null
           email_inscripto?: string
@@ -417,6 +417,7 @@ export const Constants = {
       estado_capacitacion_enum: ["visible", "oculto", "borrador"],
       estado_grupo_enum: ["activo", "inactivo", "cerrado", "lleno"],
       modalidad_enum: ["presencial", "online", "hibrido"],
+      nivel_mecanico_enum: ["Junior" , "Basico" , "Avanzado"]
     },
   },
 } as const

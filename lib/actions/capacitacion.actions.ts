@@ -7,83 +7,48 @@ import {
     updateCapacitacion, 
     deleteCapacitacion,
     getCapacitaciones 
-} from '@/lib/services/capacitacion.service'; // Correcto (1 nivel)
+} from '@/lib/services/capacitacion.service'; 
 import { isSuperAdmin } from '@/lib/utils/auth.utils'; 
 import { 
-    CapacitacionFormSchema, // Ya no necesita cupo_maximo
     CapacitacionFormInputs,
     CapacitacionRow 
-} from '@/types/capacitacion.types'; // FIX CRÍTICO: Debería ser 1 nivel (../types/...)
+} from '@/types/capacitacion.types';
 
-// --------------------------------------------------------------------
-// Esquema de Validación Zod (Definición local para Server Actions)
-// FIX: Eliminamos la lógica de cupo_maximo de este esquema
-// --------------------------------------------------------------------
-
+// Esquema Local para el Action
 const ModalidadEnum = z.enum(['presencial', 'online', 'hibrido']);
 const EstadoCapacitacionEnum = z.enum(['visible', 'oculto', 'borrador']);
 
 const LocalCapacitacionSchema = z.object({
     id: z.coerce.number().optional(), 
-    nombre: z.string().min(5, 'El nombre debe ser descriptivo (mínimo 5 caracteres).')
-             .max(255, 'El nombre no debe exceder los 255 caracteres.'),
-    descripcion: z.string().min(20, 'La descripción es obligatoria y debe ser detallada.')
-                  .max(1000, 'La descripción es demasiado larga.'),
+    nombre: z.string().min(5).max(255),
+    descripcion: z.string().min(20).max(1000),
     modalidad: ModalidadEnum.default('online'),
     estado: EstadoCapacitacionEnum.default('borrador'),
-    // cupo_maximo ELIMINADO
+    ubicacion: z.string().optional().nullable(), // Agregamos ubicacion
 });
 
-
-// --------------------------------------------------------------------
-// ACCIÓN DE LECTURA (GET)
-// --------------------------------------------------------------------
-
-/**
- * Obtiene todas las capacitaciones y maneja el retorno estructurado para el Server Component.
- */
 export async function getCapacitacionesAction(): Promise<{ success: true, data: CapacitacionRow[] } | { success: false, message: string }> {
-    'use server';
-
-    if (!(await isSuperAdmin())) {
-        return { success: false, message: 'Fallo de autorización al obtener datos.' };
-    }
-
+    if (!(await isSuperAdmin())) return { success: false, message: 'Fallo de autorización.' };
     try {
-        const data = await getCapacitaciones(); // Llama al servicio que aplica RLS
+        const data = await getCapacitaciones(); 
         return { success: true, data };
     } catch (error) {
-        return { success: false, message: (error as Error).message || 'Fallo al obtener la lista de capacitaciones.' };
+        return { success: false, message: (error as Error).message };
     }
 }
 
-// --------------------------------------------------------------------
-// ACCIONES DE MUTACIÓN (FIXED: ELIMINAR CAMPO cupo_maximo)
-// --------------------------------------------------------------------
-
-/**
- * Maneja la creación de una nueva capacitación.
- */
 export async function createCapacitacionAction(prevState: any, formData: FormData) {
-    'use server'; 
-    
-    if (!(await isSuperAdmin())) {
-        return { message: 'Error: No autorizado. Solo SuperAdmin puede crear capacitaciones.' };
-    }
+    if (!(await isSuperAdmin())) return { message: 'No autorizado.' };
     
     const validatedFields = LocalCapacitacionSchema.safeParse({
         nombre: formData.get('nombre'),
         descripcion: formData.get('descripcion'),
         modalidad: formData.get('modalidad'),
         estado: formData.get('estado'),
+        ubicacion: formData.get('ubicacion'), // Leemos ubicacion
     });
 
-    if (!validatedFields.success) {
-        return {
-            errors: validatedFields.error.flatten().fieldErrors,
-            message: 'Campos inválidos. Verifica todos los datos.',
-        };
-    }
+    if (!validatedFields.success) return { errors: validatedFields.error.flatten().fieldErrors, message: 'Campos inválidos.' };
     
     const data: Omit<CapacitacionFormInputs, 'id'> = validatedFields.data;
 
@@ -92,19 +57,12 @@ export async function createCapacitacionAction(prevState: any, formData: FormDat
         revalidatePath('/admin/capacitaciones'); 
         return { success: true, message: 'Capacitación creada con éxito.' };
     } catch (error) {
-        return { success: false, message: (error as Error).message || 'Error desconocido en la BD.' };
+        return { success: false, message: (error as Error).message };
     }
 }
 
-/**
- * Maneja la actualización de una capacitación existente.
- */
 export async function updateCapacitacionAction(prevState: any, formData: FormData) {
-    'use server'; 
-    
-    if (!(await isSuperAdmin())) {
-        return { message: 'Error: No autorizado. Solo SuperAdmin puede editar capacitaciones.' };
-    }
+    if (!(await isSuperAdmin())) return { message: 'No autorizado.' };
 
     const validatedFields = LocalCapacitacionSchema.safeParse({
         id: formData.get('id'), 
@@ -112,44 +70,30 @@ export async function updateCapacitacionAction(prevState: any, formData: FormDat
         descripcion: formData.get('descripcion'),
         modalidad: formData.get('modalidad'),
         estado: formData.get('estado'),
+        ubicacion: formData.get('ubicacion'), // Leemos ubicacion
     });
 
-    if (!validatedFields.success) {
-        return {
-            errors: validatedFields.error.flatten().fieldErrors,
-            message: 'Campos inválidos. Verifica todos los datos.',
-        };
-    }
+    if (!validatedFields.success) return { errors: validatedFields.error.flatten().fieldErrors, message: 'Campos inválidos.' };
 
     const { id, ...updateData } = validatedFields.data;
-    if (!id) {
-        return { message: 'Error: ID de la capacitación es requerido para actualizar.' };
-    }
+    if (!id) return { message: 'Falta ID.' };
 
     try {
         await updateCapacitacion(id, updateData);
         revalidatePath('/admin/capacitaciones');
-        return { success: true, message: 'Capacitación actualizada con éxito.' };
+        return { success: true, message: 'Actualizada con éxito.' };
     } catch (error) {
-        return { success: false, message: (error as Error).message || 'Error desconocido en la BD.' };
+        return { success: false, message: (error as Error).message };
     }
 }
 
-/**
- * Maneja la eliminación de una capacitación.
- */
 export async function deleteCapacitacionAction(id: number) {
-    'use server'; 
-
-    if (!(await isSuperAdmin())) {
-        return { success: false, message: 'Error: No autorizado. Solo SuperAdmin puede eliminar capacitaciones.' };
-    }
-    
+    if (!(await isSuperAdmin())) return { success: false, message: 'No autorizado.' };
     try {
         await deleteCapacitacion(id);
         revalidatePath('/admin/capacitaciones');
-        return { success: true, message: 'Capacitación eliminada con éxito.' };
+        return { success: true, message: 'Eliminada con éxito.' };
     } catch (error) {
-        return { success: false, message: (error as Error).message || 'Error desconocido en la BD.' };
+        return { success: false, message: (error as Error).message };
     }
 }

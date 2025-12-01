@@ -1,34 +1,58 @@
 import { z } from 'zod';
 
 // ====================================================================
-// Esquema de Validación para el Formulario de Inscripción Pública
+// Esquema de Validación Inteligente (Híbrido)
 // ====================================================================
 
 export const InscripcionFormSchema = z.object({
-  // Datos del Alumno
-  nombre_inscripto: z.string()
-    .min(3, "El nombre completo debe tener al menos 3 caracteres.")
-    .max(100, "El nombre es demasiado largo."),
+  // Datos Generales
+  grupo_id: z.coerce.number().min(1, "Error crítico: Grupo no identificado."),
+  concesionario_id: z.coerce.number().min(1, "Debes seleccionar un concesionario."),
   
-  email_inscripto: z.string()
-    .email("Por favor, ingresa una dirección de correo válida."),
-  
-  telefono: z.string()
-    .min(6, "El teléfono debe tener al menos 6 caracteres para poder contactarte.")
-    .max(20, "El número es demasiado largo."),
+  // Datos de Contacto (Siempre requeridos para la inscripción)
+  email_inscripto: z.string().email("Ingresa un correo válido."),
+  telefono: z.string().min(6, "El teléfono es requerido."),
 
-  // Relaciones (Selects y Datos Ocultos)
+  // LÓGICA CONDICIONAL: ¿Es nuevo o existente?
+  // Usamos un campo bandera 'es_nuevo_mecanico' (string "true" o "false" desde el form)
+  es_nuevo_mecanico: z.enum(["true", "false"]),
+
+  // Campos para Mecánico Existente (Opcional si es nuevo)
+  mecanico_id: z.string().optional(), // Viene como string del select, lo convertiremos
+
+  // Campos para Nuevo Mecánico (Opcionales si es existente)
+  nuevo_nombre: z.string().optional(),
+  nuevo_apellido: z.string().optional(),
+
+}).superRefine((data, ctx) => {
+  // VALIDACIÓN CRUZADA (Custom Logic)
   
-  // Usamos z.coerce.number() porque los valores de los <select> HTML suelen ser strings
-  concesionario_id: z.coerce.number()
-    .min(1, "Es obligatorio seleccionar el concesionario al que perteneces."),
-  
-  grupo_id: z.coerce.number()
-    .min(1, "Error crítico: No se ha identificado el grupo de cursado."),
+  if (data.es_nuevo_mecanico === "false") {
+    // Si NO es nuevo, debe haber seleccionado un ID
+    if (!data.mecanico_id || data.mecanico_id === "0") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Debes seleccionar un mecánico de la lista.",
+        path: ["mecanico_id"],
+      });
+    }
+  } else {
+    // Si ES nuevo, nombre y apellido son obligatorios
+    if (!data.nuevo_nombre || data.nuevo_nombre.length < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "El nombre es obligatorio para el nuevo registro.",
+        path: ["nuevo_nombre"],
+      });
+    }
+    if (!data.nuevo_apellido || data.nuevo_apellido.length < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "El apellido es obligatorio.",
+        path: ["nuevo_apellido"],
+      });
+    }
+  }
 });
-
-// ====================================================================
-// Tipo Inferido para usar en React Hook Form
-// ====================================================================
 
 export type InscripcionFormInputs = z.infer<typeof InscripcionFormSchema>;

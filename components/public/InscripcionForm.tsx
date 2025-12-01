@@ -1,19 +1,19 @@
 'use client';
 
+// Importamos SubmitHandler para arreglar el error del onSubmit
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
-import { Loader2, Send, CheckCircle2, AlertTriangle, User, Mail, Phone, Building2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Loader2, Send, CheckCircle2, AlertTriangle, User, Mail, Phone, Building2, UserPlus, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
 import { createInscripcionAction } from '@/lib/actions/inscripcion.actions';
+import { getMecanicosAction } from '@/lib/actions/mecanico.actions'; 
 import { InscripcionFormSchema, InscripcionFormInputs } from '@/types/inscripcion.types';
+import Modal from '@/components/ui/Modal'; 
 
-// Definimos una interfaz mínima para los concesionarios
-interface ConcesionarioSimple {
-    id: number;
-    nombre: string;
-}
+interface ConcesionarioSimple { id: number; nombre: string; }
+interface MecanicoSimple { id: number; nombre: string; apellido: string; }
 
 interface InscripcionFormProps {
     grupoId: number;
@@ -21,46 +21,98 @@ interface InscripcionFormProps {
 }
 
 export default function InscripcionForm({ grupoId, concesionarios }: InscripcionFormProps) {
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [submitError, setSubmitError] = useState<string | null>(null);
     const [isSuccess, setIsSuccess] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    const [mecanicos, setMecanicos] = useState<MecanicoSimple[]>([]);
+    const [isLoadingMecanicos, setIsLoadingMecanicos] = useState(false);
+    const [isNewMechanicMode, setIsNewMechanicMode] = useState(false);
 
-    const { 
-        register, 
-        handleSubmit, 
-        formState: { errors } 
-    } = useForm<InscripcionFormInputs>({
-        // @ts-ignore: Ignoramos conflicto de tipos estricto entre Zod y RHF
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [pendingData, setPendingData] = useState<InscripcionFormInputs | null>(null);
+
+    const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<InscripcionFormInputs>({
+        // @ts-ignore
         resolver: zodResolver(InscripcionFormSchema),
         defaultValues: {
             grupo_id: grupoId,
-            concesionario_id: 0, // Valor 0 obliga al usuario a elegir una opción válida
-            nombre_inscripto: '',
-            email_inscripto: '',
-            telefono: ''
+            concesionario_id: 0,
+            es_nuevo_mecanico: "false",
+            mecanico_id: "0",
+            nuevo_nombre: "",
+            nuevo_apellido: "",
+            email_inscripto: "",
+            telefono: ""
         }
     });
 
-    const onSubmit: SubmitHandler<InscripcionFormInputs> = async (data) => {
-        setIsSubmitting(true);
+    const selectedConcesionario = watch('concesionario_id');
+
+    useEffect(() => {
+        if (selectedConcesionario && Number(selectedConcesionario) > 0) {
+            setIsLoadingMecanicos(true);
+            setMecanicos([]);
+            setValue('mecanico_id', "0"); 
+            setIsNewMechanicMode(false);
+            setValue('es_nuevo_mecanico', "false");
+
+            getMecanicosAction(Number(selectedConcesionario))
+                // FIX: Tipamos explícitamente el 'result' como any para evitar error de inferencia
+                .then((result: any) => {
+                    if (result.success && result.data) {
+                        setMecanicos(result.data as MecanicoSimple[]);
+                    }
+                })
+                .finally(() => setIsLoadingMecanicos(false));
+        } else {
+            setMecanicos([]);
+        }
+    }, [selectedConcesionario, setValue]);
+
+    const handleMecanicoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const val = e.target.value;
+        if (val === "new_entry") {
+            setIsNewMechanicMode(true);
+            setValue('es_nuevo_mecanico', "true");
+            setValue('mecanico_id', ""); 
+        } else {
+            setIsNewMechanicMode(false);
+            setValue('es_nuevo_mecanico', "false");
+            setValue('mecanico_id', val);
+        }
+    };
+
+    // FIX: Usamos SubmitHandler para que coincida con lo que espera handleSubmit
+    const onPreSubmit: SubmitHandler<InscripcionFormInputs> = (data) => {
         setSubmitError(null);
 
+        if (data.es_nuevo_mecanico === "true") {
+            setPendingData(data);
+            setShowConfirmModal(true);
+        } else {
+            executeSubmission(data);
+        }
+    };
+
+    const executeSubmission = async (data: InscripcionFormInputs) => {
+        setIsSubmitting(true);
         try {
             const result = await createInscripcionAction(data);
-
             if (result.success) {
                 setIsSuccess(true);
+                setShowConfirmModal(false);
             } else {
-                setSubmitError(result.message || "Error al procesar la inscripción.");
+                setSubmitError(result.message || "Error al inscribir.");
+                setShowConfirmModal(false); 
             }
         } catch (error) {
-            setSubmitError("Ocurrió un error inesperado. Intente nuevamente.");
+            setSubmitError("Error de conexión. Intente nuevamente.");
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    // Pantalla de Éxito
     if (isSuccess) {
         return (
             <div className="bg-green-50 border border-green-200 rounded-xl p-8 text-center animate-fade-in shadow-sm">
@@ -69,12 +121,9 @@ export default function InscripcionForm({ grupoId, concesionarios }: Inscripcion
                 </div>
                 <h3 className="text-2xl font-bold text-green-800 mb-2">¡Inscripción Exitosa!</h3>
                 <p className="text-green-700 mb-8 max-w-md mx-auto">
-                    Tus datos han sido registrados correctamente. Tu cupo ya está reservado.
+                    Tus datos han sido registrados correctamente y el cupo está reservado.
                 </p>
-                <Link 
-                    href="/"
-                    className="inline-block px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm"
-                >
+                <Link href="/" className="px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm">
                     Volver al Inicio
                 </Link>
             </div>
@@ -82,134 +131,172 @@ export default function InscripcionForm({ grupoId, concesionarios }: Inscripcion
     }
 
     return (
-        <form onSubmit={handleSubmit(onSubmit)} className="bg-white p-6 md:p-8 rounded-xl shadow-lg border border-gray-100">
-            <h2 className="text-2xl font-bold text-crucianelli-secondary mb-6 text-center">
-                Formulario de Inscripción
-            </h2>
+        <>
+        {/*@ts-ignore */}
+            <form onSubmit={handleSubmit(onPreSubmit)} className="bg-white p-6 md:p-8 rounded-xl shadow-lg border border-gray-100 relative">
+                <h2 className="text-2xl font-bold text-crucianelli-secondary mb-6 text-center">
+                    Inscripción a Capacitación
+                </h2>
 
-            {/* Input Oculto: ID del Grupo */}
-            <input type="hidden" {...register('grupo_id')} />
+                <input type="hidden" {...register('grupo_id')} />
+                <input type="hidden" {...register('es_nuevo_mecanico')} />
 
-            <div className="space-y-5">
-                
-                {/* Nombre Completo */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Nombre Completo</label>
-                    <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <User className="h-5 w-5 text-gray-400" />
+                <div className="space-y-5">
+                    
+                    {/* 1. Concesionario */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Concesionario</label>
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <Building2 className="h-5 w-5 text-gray-400" />
+                            </div>
+                            <select
+                                {...register('concesionario_id')}
+                                className="pl-10 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:ring-2 focus:ring-crucianelli-primary bg-white"
+                            >
+                                <option value="0">Selecciona tu concesionario...</option>
+                                {concesionarios.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                            </select>
                         </div>
-                        <input
-                            type="text"
-                            {...register('nombre_inscripto')}
-                            className={`pl-10 block w-full rounded-lg border px-3 py-2.5 text-sm focus:ring-2 focus:ring-crucianelli-primary focus:border-transparent transition-all ${
-                                errors.nombre_inscripto ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                            }`}
-                            placeholder="Ej: Juan Pérez"
-                        />
+                        {errors.concesionario_id && <p className="text-red-500 text-xs mt-1">{errors.concesionario_id.message}</p>}
                     </div>
-                    {errors.nombre_inscripto && <p className="mt-1 text-sm text-red-500">{errors.nombre_inscripto.message}</p>}
-                </div>
 
-                {/* Email */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Correo Electrónico</label>
-                    <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Mail className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <input
-                            type="email"
-                            {...register('email_inscripto')}
-                            className={`pl-10 block w-full rounded-lg border px-3 py-2.5 text-sm focus:ring-2 focus:ring-crucianelli-primary focus:border-transparent transition-all ${
-                                errors.email_inscripto ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                            }`}
-                            placeholder="juan.perez@email.com"
-                        />
-                    </div>
-                    {errors.email_inscripto && <p className="mt-1 text-sm text-red-500">{errors.email_inscripto.message}</p>}
-                </div>
-
-                {/* Teléfono */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Teléfono / WhatsApp</label>
-                    <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Phone className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <input
-                            type="tel"
-                            {...register('telefono')}
-                            className={`pl-10 block w-full rounded-lg border px-3 py-2.5 text-sm focus:ring-2 focus:ring-crucianelli-primary focus:border-transparent transition-all ${
-                                errors.telefono ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                            }`}
-                            placeholder="+54 9 341 1234567"
-                        />
-                    </div>
-                    {errors.telefono && <p className="mt-1 text-sm text-red-500">{errors.telefono.message}</p>}
-                </div>
-
-                {/* Concesionario */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Concesionario</label>
-                    <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Building2 className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <select
-                            {...register('concesionario_id')}
-                            className={`pl-10 block w-full rounded-lg border px-3 py-2.5 text-sm focus:ring-2 focus:ring-crucianelli-primary focus:border-transparent transition-all appearance-none bg-white ${
-                                errors.concesionario_id ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                            }`}
-                        >
-                            <option value="0">Selecciona tu concesionario...</option>
-                            {concesionarios.map((conc) => (
-                                <option key={conc.id} value={conc.id}>
-                                    {conc.nombre}
+                    {/* 2. Selección de Mecánico */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Asistente</label>
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <User className="h-5 w-5 text-gray-400" />
+                            </div>
+                            <select
+                                disabled={!selectedConcesionario || Number(selectedConcesionario) === 0 || isLoadingMecanicos}
+                                onChange={handleMecanicoChange}
+                                className={`pl-10 block w-full rounded-lg border px-3 py-2.5 text-sm focus:ring-2 focus:ring-crucianelli-primary bg-white appearance-none ${
+                                    isNewMechanicMode ? 'border-crucianelli-secondary ring-1 ring-crucianelli-secondary bg-blue-50/30' : 'border-gray-300'
+                                }`}
+                                defaultValue="0"
+                            >
+                                <option value="0">
+                                    {isLoadingMecanicos ? "Cargando..." : "Selecciona una persona..."}
                                 </option>
-                            ))}
-                        </select>
+                                {mecanicos.map(m => (
+                                    <option key={m.id} value={m.id}>{m.apellido}, {m.nombre}</option>
+                                ))}
+                                <option disabled>──────────</option>
+                                <option value="new_entry" className="font-bold text-blue-800 bg-blue-100">
+                                    + Agregar Nuevo Mecánico
+                                </option>
+                            </select>
+                        </div>
+                        {errors.mecanico_id && !isNewMechanicMode && <p className="text-red-500 text-xs mt-1">{errors.mecanico_id.message}</p>}
                     </div>
-                    {errors.concesionario_id && <p className="mt-1 text-sm text-red-500">{errors.concesionario_id.message}</p>}
-                </div>
 
-            </div>
-
-            {/* Mensaje de Error General */}
-            {submitError && (
-                <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start text-red-700 text-sm">
-                    <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0 mt-0.5" />
-                    <span>{submitError}</span>
-                </div>
-            )}
-
-            {/* Botón Submit */}
-            <div className="mt-8">
-                <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className={`w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-lg shadow-md text-base font-bold text-white transition-all transform hover:-translate-y-0.5 ${
-                        isSubmitting
-                            ? 'bg-gray-400 cursor-not-allowed'
-                            : 'bg-crucianelli-primary hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-crucianelli-primary'
-                    }`}
-                >
-                    {isSubmitting ? (
-                        <>
-                            <Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5" />
-                            Procesando...
-                        </>
-                    ) : (
-                        <>
-                            <Send className="w-5 h-5 mr-2" />
-                            Confirmar Inscripción
-                        </>
+                    {/* 3. Campos para Nuevo Mecánico */}
+                    {isNewMechanicMode && (
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 animate-fade-in space-y-4">
+                            <div className="flex items-center gap-2 text-blue-800 text-sm font-semibold mb-2 border-b border-blue-200 pb-2">
+                                <UserPlus className="w-4 h-4" />
+                                <span>Alta de Nuevo Personal</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs text-blue-700 font-medium ml-1">Nombre</label>
+                                    <input {...register('nuevo_nombre')} placeholder="Ej: Juan" className="w-full rounded border border-blue-200 px-3 py-2 text-sm focus:border-blue-500 outline-none" />
+                                    {errors.nuevo_nombre && <p className="text-red-500 text-xs mt-1">{errors.nuevo_nombre.message}</p>}
+                                </div>
+                                <div>
+                                    <label className="text-xs text-blue-700 font-medium ml-1">Apellido</label>
+                                    <input {...register('nuevo_apellido')} placeholder="Ej: Pérez" className="w-full rounded border border-blue-200 px-3 py-2 text-sm focus:border-blue-500 outline-none" />
+                                    {errors.nuevo_apellido && <p className="text-red-500 text-xs mt-1">{errors.nuevo_apellido.message}</p>}
+                                </div>
+                            </div>
+                            <div className="flex items-start gap-2">
+                                <AlertCircle className="w-3 h-3 text-blue-500 mt-0.5" />
+                                <p className="text-[11px] text-blue-600 leading-tight">
+                                    Este mecánico se guardará automáticamente en la base de datos con nivel <strong>Junior</strong>.
+                                </p>
+                            </div>
+                        </div>
                     )}
-                </button>
-                <p className="text-xs text-center text-gray-400 mt-4">
-                    Al inscribirte aceptas recibir comunicaciones sobre este curso.
-                </p>
-            </div>
-        </form>
+
+                    {/* 4. Datos de Contacto */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                            <div className="relative">
+                                <Mail className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                                <input type="email" {...register('email_inscripto')} className="pl-9 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-crucianelli-primary outline-none" placeholder="correo@ejemplo.com" />
+                            </div>
+                            {errors.email_inscripto && <p className="text-red-500 text-xs mt-1">{errors.email_inscripto.message}</p>}
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                            <div className="relative">
+                                <Phone className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                                <input type="tel" {...register('telefono')} className="pl-9 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-crucianelli-primary outline-none" placeholder="341..." />
+                            </div>
+                            {errors.telefono && <p className="text-red-500 text-xs mt-1">{errors.telefono.message}</p>}
+                        </div>
+                    </div>
+                </div>
+
+                {submitError && (
+                    <div className="mt-6 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center animate-fade-in">
+                        <AlertTriangle className="w-4 h-4 mr-2 flex-shrink-0" />
+                        {submitError}
+                    </div>
+                )}
+
+                <div className="mt-8">
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full flex justify-center items-center py-3 px-4 bg-crucianelli-primary text-white font-bold rounded-lg hover:bg-red-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0"
+                    >
+                        {isSubmitting ? <Loader2 className="animate-spin w-5 h-5" /> : <Send className="w-5 h-5 mr-2" />}
+                        {isNewMechanicMode ? 'Registrar e Inscribir' : 'Confirmar Inscripción'}
+                    </button>
+                    <p className="text-xs text-center text-gray-400 mt-4">
+                        Al inscribirte aceptas recibir comunicaciones sobre este curso.
+                    </p>
+                </div>
+            </form>
+
+            {/* Modal de Confirmación */}
+            <Modal isOpen={showConfirmModal} onClose={() => setShowConfirmModal(false)} title="Confirmar Nuevo Mecánico">
+                <div className="space-y-6">
+                    <div className="flex items-start gap-4 bg-yellow-50 p-4 rounded-xl border border-yellow-200 shadow-sm">
+                        <div className="bg-yellow-100 p-2 rounded-full">
+                            <AlertCircle className="w-6 h-6 text-yellow-600" />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-yellow-900 text-base">¿Estás seguro?</h4>
+                            <p className="text-sm text-yellow-800 mt-1 leading-relaxed">
+                                Al confirmar, se agregará a <strong>{pendingData?.nuevo_nombre} {pendingData?.nuevo_apellido}</strong> a la base de datos oficial de Crucianelli como <strong>Mecánico Junior</strong>.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="text-center">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-2">Datos a registrar</p>
+                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 inline-block min-w-[200px]">
+                            <p className="font-medium text-gray-800 text-lg">
+                                {pendingData?.nuevo_apellido}, {pendingData?.nuevo_nombre}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">Concesionario ID: {pendingData?.concesionario_id}</p>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                        <button onClick={() => setShowConfirmModal(false)} className="px-5 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">
+                            Cancelar
+                        </button>
+                        <button onClick={() => pendingData && executeSubmission(pendingData)} disabled={isSubmitting} className="px-5 py-2.5 text-sm font-bold text-white bg-crucianelli-secondary hover:bg-crucianelli-primary rounded-lg shadow-md flex items-center transition-all">
+                            {isSubmitting ? <><Loader2 className="animate-spin w-4 h-4 mr-2" />Guardando...</> : <><UserPlus className="w-4 h-4 mr-2" />Sí, Agregar e Inscribir</>}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+        </>
     );
 }

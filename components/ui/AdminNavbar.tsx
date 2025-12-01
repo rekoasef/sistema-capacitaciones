@@ -1,8 +1,8 @@
 import { signOut } from '@/lib/actions/auth.actions'; 
 import Image from 'next/image';
 import Link from 'next/link';
-// Agregamos ClipboardList a los imports
-import { LogOut, LayoutDashboard, List, Users, ClipboardList } from 'lucide-react'; 
+// Importamos BarChart3 para el icono de reportes
+import { LogOut, LayoutDashboard, List, Users, ClipboardList, BarChart3 } from 'lucide-react'; 
 
 export default function AdminNavbar() {
   return (
@@ -36,10 +36,15 @@ export default function AdminNavbar() {
                 <span className="hidden md:inline">Capacitaciones</span>
             </Link>
 
-            {/* NUEVO ENLACE: Inscripciones */}
             <Link href="/admin/inscripciones" className="text-gray-200 hover:text-white transition duration-150 text-sm font-medium flex items-center">
                 <ClipboardList className="h-5 w-5 mr-1" /> 
                 <span className="hidden md:inline">Inscripciones</span>
+            </Link>
+
+            {/* --- NUEVO ENLACE: REPORTES --- */}
+            <Link href="/admin/reportes" className="text-gray-200 hover:text-white transition duration-150 text-sm font-medium flex items-center">
+                <BarChart3 className="h-5 w-5 mr-1" /> 
+                <span className="hidden md:inline">Reportes</span>
             </Link>
             
             <Link href="/admin/concesionarios" className="text-gray-200 hover:text-white transition duration-150 text-sm font-medium flex items-center">
