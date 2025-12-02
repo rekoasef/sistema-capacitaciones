@@ -33,7 +33,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
         supabase.from('grupos').select('*', { count: 'exact', head: true }).eq('estado', 'activo'),
 
         // D. Asistencias Confirmadas (Para calcular tasa)
-        supabase.from('inscripciones').select('*', { count: 'exact', head: true }).eq('asistencia_marcada', true),
+        // FIX CRÍTICO: Cambiado 'true' (boolean) por 'presente' (string) para coincidir con la DB
+        supabase.from('inscripciones').select('*', { count: 'exact', head: true }).eq('asistencia_marcada', 'presente'),
 
         // E. Feed: Últimas 5 inscripciones con datos relacionales (Nombre curso + Concesionario)
         supabase.from('inscripciones')

@@ -1,11 +1,12 @@
 'use client';
 
-// Importamos SubmitHandler para arreglar el error del onSubmit
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState, useEffect } from 'react';
-import { Loader2, Send, CheckCircle2, AlertTriangle, User, Mail, Phone, Building2, UserPlus, AlertCircle } from 'lucide-react';
+import { Loader2, Send, CheckCircle2, User, Mail, Phone, Building2, UserPlus, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+// Importamos toast de sonner
+import { toast } from 'sonner';
 
 import { createInscripcionAction } from '@/lib/actions/inscripcion.actions';
 import { getMecanicosAction } from '@/lib/actions/mecanico.actions'; 
@@ -22,7 +23,7 @@ interface InscripcionFormProps {
 
 export default function InscripcionForm({ grupoId, concesionarios }: InscripcionFormProps) {
     const [isSuccess, setIsSuccess] = useState(false);
-    const [submitError, setSubmitError] = useState<string | null>(null);
+    // Eliminamos submitError
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const [mecanicos, setMecanicos] = useState<MecanicoSimple[]>([]);
@@ -58,12 +59,14 @@ export default function InscripcionForm({ grupoId, concesionarios }: Inscripcion
             setValue('es_nuevo_mecanico', "false");
 
             getMecanicosAction(Number(selectedConcesionario))
-                // FIX: Tipamos explícitamente el 'result' como any para evitar error de inferencia
                 .then((result: any) => {
                     if (result.success && result.data) {
                         setMecanicos(result.data as MecanicoSimple[]);
+                    } else {
+                        toast.error("No se pudieron cargar los mecánicos.");
                     }
                 })
+                .catch(() => toast.error("Error de conexión al buscar mecánicos."))
                 .finally(() => setIsLoadingMecanicos(false));
         } else {
             setMecanicos([]);
@@ -83,10 +86,7 @@ export default function InscripcionForm({ grupoId, concesionarios }: Inscripcion
         }
     };
 
-    // FIX: Usamos SubmitHandler para que coincida con lo que espera handleSubmit
     const onPreSubmit: SubmitHandler<InscripcionFormInputs> = (data) => {
-        setSubmitError(null);
-
         if (data.es_nuevo_mecanico === "true") {
             setPendingData(data);
             setShowConfirmModal(true);
@@ -97,17 +97,27 @@ export default function InscripcionForm({ grupoId, concesionarios }: Inscripcion
 
     const executeSubmission = async (data: InscripcionFormInputs) => {
         setIsSubmitting(true);
+        // Toast de carga
+        const toastId = toast.loading('Procesando tu inscripción...');
+
         try {
             const result = await createInscripcionAction(data);
+            
             if (result.success) {
+                toast.dismiss(toastId);
+                toast.success('¡Inscripción confirmada!', {
+                    description: 'Revisa tu correo electrónico.'
+                });
                 setIsSuccess(true);
                 setShowConfirmModal(false);
             } else {
-                setSubmitError(result.message || "Error al inscribir.");
+                toast.dismiss(toastId);
+                toast.error(result.message || "No se pudo completar la inscripción.");
                 setShowConfirmModal(false); 
             }
         } catch (error) {
-            setSubmitError("Error de conexión. Intente nuevamente.");
+            toast.dismiss(toastId);
+            toast.error("Error de conexión. Intente nuevamente.");
         } finally {
             setIsSubmitting(false);
         }
@@ -152,7 +162,7 @@ export default function InscripcionForm({ grupoId, concesionarios }: Inscripcion
                             </div>
                             <select
                                 {...register('concesionario_id')}
-                                className="pl-10 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:ring-2 focus:ring-crucianelli-primary bg-white"
+                                className="pl-10 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:ring-2 focus:ring-crucianelli-primary bg-white focus:outline-none"
                             >
                                 <option value="0">Selecciona tu concesionario...</option>
                                 {concesionarios.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
@@ -171,7 +181,7 @@ export default function InscripcionForm({ grupoId, concesionarios }: Inscripcion
                             <select
                                 disabled={!selectedConcesionario || Number(selectedConcesionario) === 0 || isLoadingMecanicos}
                                 onChange={handleMecanicoChange}
-                                className={`pl-10 block w-full rounded-lg border px-3 py-2.5 text-sm focus:ring-2 focus:ring-crucianelli-primary bg-white appearance-none ${
+                                className={`pl-10 block w-full rounded-lg border px-3 py-2.5 text-sm focus:ring-2 focus:ring-crucianelli-primary bg-white appearance-none focus:outline-none ${
                                     isNewMechanicMode ? 'border-crucianelli-secondary ring-1 ring-crucianelli-secondary bg-blue-50/30' : 'border-gray-300'
                                 }`}
                                 defaultValue="0"
@@ -240,12 +250,7 @@ export default function InscripcionForm({ grupoId, concesionarios }: Inscripcion
                     </div>
                 </div>
 
-                {submitError && (
-                    <div className="mt-6 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center animate-fade-in">
-                        <AlertTriangle className="w-4 h-4 mr-2 flex-shrink-0" />
-                        {submitError}
-                    </div>
-                )}
+                {/* Eliminamos submitError block */}
 
                 <div className="mt-8">
                     <button

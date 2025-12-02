@@ -1,12 +1,13 @@
 'use client';
 
-import { useForm, useFieldArray, SubmitHandler } from 'react-hook-form';
+import { useForm, useFieldArray, SubmitHandler, SubmitErrorHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Save, Loader2, Trash2, CalendarPlus, AlertTriangle } from 'lucide-react';
+import { Plus, Edit, Save, Loader2, Trash2, CalendarPlus } from 'lucide-react';
+// Importamos toast de sonner
+import { toast } from 'sonner';
 
 import Modal from '@/components/ui/Modal';
-// Importamos ambas acciones: crear y actualizar
 import { createGrupoAction, updateGrupoAction } from '@/lib/actions/grupo.actions';
 import { 
     GrupoFormSchema, 
@@ -22,7 +23,7 @@ interface GroupFormProps {
 
 export default function GroupForm({ capacitacionId, grupoToEdit }: GroupFormProps) {
     const [isOpen, setIsOpen] = useState(false);
-    const [serverError, setServerError] = useState<string | null>(null);
+    // Eliminamos serverError
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const isEditMode = !!grupoToEdit;
@@ -53,7 +54,6 @@ export default function GroupForm({ capacitacionId, grupoToEdit }: GroupFormProp
 
     useEffect(() => {
         if (isOpen) {
-            setServerError(null);
             if (grupoToEdit) {
                 reset({
                     id: grupoToEdit.id,
@@ -82,32 +82,40 @@ export default function GroupForm({ capacitacionId, grupoToEdit }: GroupFormProp
 
     const onSubmit: SubmitHandler<GrupoFormInputs> = async (data) => {
         setIsSubmitting(true);
-        setServerError(null);
+        // Toast de carga
+        const toastId = toast.loading(isEditMode ? 'Actualizando cronograma...' : 'Creando grupo...');
 
         try {
-            // Tipado explícito para evitar error de inferencia de TS
             let result: { success: boolean; message: string };
             
             if (isEditMode) {
-                // Acción de Actualización (Smart Update)
                 result = await updateGrupoAction(data);
             } else {
-                // Acción de Creación
                 result = await createGrupoAction(data);
             }
 
             if (!result.success) {
-                setServerError(result.message || 'Error al guardar el grupo.');
+                toast.dismiss(toastId);
+                toast.error(result.message || 'Error al guardar el grupo.');
             } else {
+                toast.dismiss(toastId);
+                toast.success(result.message || '¡Grupo guardado con éxito!');
                 setIsOpen(false);
-                reset(); // Limpia el formulario al cerrar si fue exitoso
+                if (!isEditMode) reset(); // Limpia solo si se creó uno nuevo
             }
         } catch (error) {
             console.error(error);
-            setServerError('Ocurrió un error inesperado.');
+            toast.dismiss(toastId);
+            toast.error('Ocurrió un error inesperado.');
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    // Callback para cuando hay errores de validación en el formulario (ej: fechas vacías)
+    const onInvalid: SubmitErrorHandler<GrupoFormInputs> = (errors) => {
+        console.log("Errores de validación:", errors);
+        toast.error("Por favor, corrige los campos marcados en rojo.");
     };
 
     return (
@@ -132,13 +140,12 @@ export default function GroupForm({ capacitacionId, grupoToEdit }: GroupFormProp
 
             <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title={modalTitle}>
                 {/* @ts-ignore */}
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
                     
                     {/* Datos Generales */}
                     <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-4">
                         <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-2">Datos Generales</h3>
                         
-                        {/* Campo Oculto para ID (Importante para el Update) */}
                         {isEditMode && <input type="hidden" {...register('id')} />}
 
                         <div>
@@ -146,7 +153,7 @@ export default function GroupForm({ capacitacionId, grupoToEdit }: GroupFormProp
                             <input
                                 {...register('nombre_grupo')}
                                 placeholder="Ej: Grupo 1 - Turno Mañana"
-                                className={`w-full rounded-md border px-3 py-2 text-sm focus:ring-crucianelli-primary ${errors.nombre_grupo ? 'border-red-500' : 'border-gray-300'}`}
+                                className={`w-full rounded-md border px-3 py-2 text-sm focus:ring-crucianelli-primary focus:outline-none ${errors.nombre_grupo ? 'border-red-500' : 'border-gray-300'}`}
                             />
                             {errors.nombre_grupo && <p className="text-red-500 text-xs mt-1">{errors.nombre_grupo.message}</p>}
                         </div>
@@ -157,7 +164,7 @@ export default function GroupForm({ capacitacionId, grupoToEdit }: GroupFormProp
                                 <input
                                     type="number"
                                     {...register('cupo_maximo')}
-                                    className={`w-full rounded-md border px-3 py-2 text-sm ${errors.cupo_maximo ? 'border-red-500' : 'border-gray-300'}`}
+                                    className={`w-full rounded-md border px-3 py-2 text-sm focus:outline-none ${errors.cupo_maximo ? 'border-red-500' : 'border-gray-300'}`}
                                 />
                                 {errors.cupo_maximo && <p className="text-red-500 text-xs mt-1">{errors.cupo_maximo.message}</p>}
                             </div>
@@ -166,7 +173,7 @@ export default function GroupForm({ capacitacionId, grupoToEdit }: GroupFormProp
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
                                 <select
                                     {...register('estado')}
-                                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm capitalize"
+                                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm capitalize focus:outline-none"
                                 >
                                     {EstadoGrupoEnum.options.map(st => (
                                         <option key={st} value={st}>{st}</option>
@@ -183,7 +190,7 @@ export default function GroupForm({ capacitacionId, grupoToEdit }: GroupFormProp
                             <button
                                 type="button"
                                 onClick={() => append({ fecha: '', hora_inicio: '', hora_fin: '' })}
-                                className="text-xs flex items-center text-crucianelli-secondary hover:text-crucianelli-primary font-medium"
+                                className="text-xs flex items-center text-crucianelli-secondary hover:text-crucianelli-primary font-medium transition-colors"
                             >
                                 <CalendarPlus className="w-4 h-4 mr-1" />
                                 Agregar Día
@@ -191,8 +198,7 @@ export default function GroupForm({ capacitacionId, grupoToEdit }: GroupFormProp
                         </div>
 
                         {fields.map((field, index) => (
-                            <div key={field.id} className="flex items-start gap-2 p-3 bg-white border rounded-md shadow-sm relative group">
-                                {/* Input oculto para ID del día (si existe) */}
+                            <div key={field.id} className="flex items-start gap-2 p-3 bg-white border rounded-md shadow-sm relative group animate-fade-in">
                                 <input type="hidden" {...register(`dias.${index}.id`)} />
 
                                 <div className="flex-1">
@@ -200,7 +206,7 @@ export default function GroupForm({ capacitacionId, grupoToEdit }: GroupFormProp
                                     <input
                                         type="date"
                                         {...register(`dias.${index}.fecha`)}
-                                        className={`w-full rounded border px-2 py-1 text-sm ${errors.dias?.[index]?.fecha ? 'border-red-500' : 'border-gray-300'}`}
+                                        className={`w-full rounded border px-2 py-1 text-sm focus:outline-none ${errors.dias?.[index]?.fecha ? 'border-red-500' : 'border-gray-300'}`}
                                     />
                                     {errors.dias?.[index]?.fecha && <p className="text-red-500 text-[10px] mt-1">{errors.dias[index]?.fecha?.message}</p>}
                                 </div>
@@ -210,7 +216,7 @@ export default function GroupForm({ capacitacionId, grupoToEdit }: GroupFormProp
                                     <input
                                         type="time"
                                         {...register(`dias.${index}.hora_inicio`)}
-                                        className={`w-full rounded border px-2 py-1 text-sm ${errors.dias?.[index]?.hora_inicio ? 'border-red-500' : 'border-gray-300'}`}
+                                        className={`w-full rounded border px-2 py-1 text-sm focus:outline-none ${errors.dias?.[index]?.hora_inicio ? 'border-red-500' : 'border-gray-300'}`}
                                     />
                                 </div>
 
@@ -219,9 +225,9 @@ export default function GroupForm({ capacitacionId, grupoToEdit }: GroupFormProp
                                     <input
                                         type="time"
                                         {...register(`dias.${index}.hora_fin`)}
-                                        className={`w-full rounded border px-2 py-1 text-sm ${errors.dias?.[index]?.hora_fin ? 'border-red-500' : 'border-gray-300'}`}
+                                        className={`w-full rounded border px-2 py-1 text-sm focus:outline-none ${errors.dias?.[index]?.hora_fin ? 'border-red-500' : 'border-gray-300'}`}
                                     />
-                                    {errors.dias?.[index]?.hora_fin && <p className="text-red-500 text-[10px] mt-1 absolute -bottom-4 right-0">{errors.dias[index]?.hora_fin?.message}</p>}
+                                    {errors.dias?.[index]?.hora_fin && <p className="text-red-500 text-[10px] mt-1 absolute -bottom-4 right-0 bg-white px-1 border border-red-100 rounded z-10">{errors.dias[index]?.hora_fin?.message}</p>}
                                 </div>
 
                                 <div className="pt-6">
@@ -237,21 +243,14 @@ export default function GroupForm({ capacitacionId, grupoToEdit }: GroupFormProp
                                 </div>
                             </div>
                         ))}
-                        {errors.dias && <p className="text-red-500 text-sm text-center">{errors.dias.message}</p>}
+                        {errors.dias && <p className="text-red-500 text-sm text-center bg-red-50 p-1 rounded">{errors.dias.message}</p>}
                     </div>
 
-                    {serverError && (
-                        <div className="p-3 bg-red-50 border border-red-200 rounded-md flex items-center text-red-700 text-sm">
-                            <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0" />
-                            {serverError}
-                        </div>
-                    )}
-
-                    <div className="flex justify-end pt-4 border-t">
+                    <div className="flex justify-end pt-4 border-t gap-3">
                         <button
                             type="button"
                             onClick={() => setIsOpen(false)}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 mr-3"
+                            className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
                         >
                             Cancelar
                         </button>

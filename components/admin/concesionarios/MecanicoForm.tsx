@@ -3,7 +3,9 @@
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Save, Loader2, XCircle, User, Wrench } from 'lucide-react';
+import { Plus, Edit, Save, Loader2, User } from 'lucide-react';
+// Importamos toast
+import { toast } from 'sonner';
 
 import Modal from '@/components/ui/Modal';
 import { createMecanicoAction, updateMecanicoAction } from '@/lib/actions/mecanico.actions';
@@ -21,7 +23,7 @@ interface MecanicoFormProps {
 
 export default function MecanicoForm({ concesionarioId, mecanicoToEdit }: MecanicoFormProps) {
     const [isOpen, setIsOpen] = useState(false);
-    const [serverError, setServerError] = useState<string | null>(null);
+    // Eliminamos serverError
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const isEditMode = !!mecanicoToEdit;
@@ -46,7 +48,6 @@ export default function MecanicoForm({ concesionarioId, mecanicoToEdit }: Mecani
 
     useEffect(() => {
         if (isOpen) {
-            setServerError(null);
             if (mecanicoToEdit) {
                 reset({
                     id: mecanicoToEdit.id,
@@ -70,7 +71,9 @@ export default function MecanicoForm({ concesionarioId, mecanicoToEdit }: Mecani
 
     const onSubmit: SubmitHandler<MecanicoFormInputs> = async (data) => {
         setIsSubmitting(true);
-        setServerError(null);
+        
+        // Iniciamos toast de carga
+        const toastId = toast.loading(isEditMode ? 'Actualizando datos...' : 'Registrando mecánico...');
 
         try {
             let result;
@@ -81,12 +84,20 @@ export default function MecanicoForm({ concesionarioId, mecanicoToEdit }: Mecani
             }
 
             if (!result.success) {
-                setServerError(result.message || 'Error al guardar.');
+                // Error
+                toast.dismiss(toastId);
+                toast.error(result.message || 'Error al guardar.', {
+                    description: 'Revisa los datos e intenta nuevamente.'
+                });
             } else {
+                // Éxito
+                toast.dismiss(toastId);
+                toast.success(result.message || 'Operación exitosa.');
                 setIsOpen(false);
             }
         } catch (error) {
-            setServerError('Ocurrió un error inesperado.');
+            toast.dismiss(toastId);
+            toast.error('Ocurrió un error inesperado de conexión.');
         } finally {
             setIsSubmitting(false);
         }
@@ -118,15 +129,22 @@ export default function MecanicoForm({ concesionarioId, mecanicoToEdit }: Mecani
                     {isEditMode && <input type="hidden" {...register('id')} />}
                     <input type="hidden" {...register('concesionario_id')} />
 
+                    {/* Icono decorativo en el form */}
+                    <div className="flex justify-center pb-2">
+                        <div className="bg-gray-100 p-3 rounded-full">
+                            <User className="h-8 w-8 text-gray-400" />
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
-                            <input {...register('nombre')} className="w-full rounded-md border px-3 py-2 text-sm border-gray-300" placeholder="Juan" />
+                            <input {...register('nombre')} className="w-full rounded-md border px-3 py-2 text-sm border-gray-300 focus:ring-crucianelli-primary focus:border-crucianelli-primary outline-none transition" placeholder="Juan" />
                             {errors.nombre && <p className="text-red-500 text-xs mt-1">{errors.nombre.message}</p>}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Apellido</label>
-                            <input {...register('apellido')} className="w-full rounded-md border px-3 py-2 text-sm border-gray-300" placeholder="Pérez" />
+                            <input {...register('apellido')} className="w-full rounded-md border px-3 py-2 text-sm border-gray-300 focus:ring-crucianelli-primary focus:border-crucianelli-primary outline-none transition" placeholder="Pérez" />
                             {errors.apellido && <p className="text-red-500 text-xs mt-1">{errors.apellido.message}</p>}
                         </div>
                     </div>
@@ -134,11 +152,11 @@ export default function MecanicoForm({ concesionarioId, mecanicoToEdit }: Mecani
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Rol / Puesto</label>
-                            <input {...register('rol')} className="w-full rounded-md border px-3 py-2 text-sm border-gray-300" placeholder="Mecánico" />
+                            <input {...register('rol')} className="w-full rounded-md border px-3 py-2 text-sm border-gray-300 focus:ring-crucianelli-primary focus:border-crucianelli-primary outline-none" placeholder="Mecánico" />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Nivel Técnico</label>
-                            <select {...register('nivel')} className="w-full rounded-md border px-3 py-2 text-sm border-gray-300 bg-white">
+                            <select {...register('nivel')} className="w-full rounded-md border px-3 py-2 text-sm border-gray-300 bg-white focus:ring-crucianelli-primary outline-none">
                                 {NivelMecanicoEnum.options.map((option) => (
                                     <option key={option} value={option}>{option}</option>
                                 ))}
@@ -146,13 +164,23 @@ export default function MecanicoForm({ concesionarioId, mecanicoToEdit }: Mecani
                         </div>
                     </div>
 
-                    {serverError && <div className="text-red-600 text-sm">{serverError}</div>}
+                    {/* Eliminamos el div de serverError aquí */}
 
-                    <div className="flex justify-end pt-4 border-t">
-                        <button type="button" onClick={() => setIsOpen(false)} className="mr-3 text-sm text-gray-600">Cancelar</button>
-                        <button type="submit" disabled={isSubmitting} className="bg-crucianelli-secondary text-white px-4 py-2 rounded-md text-sm">
-                            {isSubmitting ? <Loader2 className="animate-spin w-4 h-4" /> : <Save className="w-4 h-4 mr-2 inline" />}
-                            Guardar
+                    <div className="flex justify-end pt-4 border-t gap-3">
+                        <button 
+                            type="button" 
+                            onClick={() => setIsOpen(false)} 
+                            className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                        >
+                            Cancelar
+                        </button>
+                        <button 
+                            type="submit" 
+                            disabled={isSubmitting} 
+                            className="bg-crucianelli-secondary hover:bg-crucianelli-primary text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm transition-colors flex items-center"
+                        >
+                            {isSubmitting ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                            {isEditMode ? 'Guardar Cambios' : 'Registrar'}
                         </button>
                     </div>
                 </form>

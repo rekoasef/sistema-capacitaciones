@@ -6,6 +6,26 @@ import { GrupoFormInputs, GrupoWithDias } from '@/types/grupo.types';
 // ====================================================================
 
 /**
+ * NUEVO: Obtiene TODOS los grupos existentes (para filtros globales).
+ * Devuelve id, nombre y capacitacion_id para poder filtrar en cascada.
+ */
+export async function getAllGrupos() {
+    const supabase = createClient();
+    
+    const { data, error } = await supabase
+        .from('grupos')
+        .select('id, nombre_grupo, capacitacion_id')
+        .order('nombre_grupo', { ascending: true });
+
+    if (error) {
+        console.error('Error al obtener todos los grupos:', error.message);
+        return [];
+    }
+
+    return data;
+}
+
+/**
  * Obtiene TODOS los grupos de una capacitación (ADMIN).
  * Incluye inactivos, para gestión interna.
  */

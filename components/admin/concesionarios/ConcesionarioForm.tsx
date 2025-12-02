@@ -5,6 +5,9 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Save, Loader2, XCircle } from 'lucide-react';
+// Importamos 'toast' para las notificaciones
+import { toast } from 'sonner';
+
 import { createConcesionarioAction, updateConcesionarioAction } from '@/lib/actions/concesionario.actions';
 import Modal from '@/components/ui/Modal';
 import { Database } from '@/types/supabase';
@@ -20,13 +23,12 @@ type FormInputs = z.infer<typeof FormSchema>;
 
 interface ConcesionarioFormProps {
   concesionario?: Concesionario;
-  // FIX: Hacemos esta prop OPCIONAL para no obligar al Server Component a enviarla
   onSuccess?: () => void; 
 }
 
 export default function ConcesionarioForm({ concesionario, onSuccess }: ConcesionarioFormProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  // Eliminamos el estado 'submitError' ya que usaremos Toasts
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isEditMode = !!concesionario;
@@ -46,12 +48,10 @@ export default function ConcesionarioForm({ concesionario, onSuccess }: Concesio
       id: concesionario?.id,
       nombre: concesionario?.nombre || '',
     });
-    setSubmitError(null);
   }, [concesionario, isOpen, reset]);
 
   const onSubmit = async (data: FormInputs) => {
     setIsSubmitting(true);
-    setSubmitError(null);
     
     const formData = new FormData();
     formData.append('nombre', data.nombre);
@@ -60,12 +60,22 @@ export default function ConcesionarioForm({ concesionario, onSuccess }: Concesio
     }
 
     const action = isEditMode ? updateConcesionarioAction : createConcesionarioAction;
+    
+    // Mostramos un toast de carga inicial (opcional, pero mejora UX)
+    const toastId = toast.loading('Procesando solicitud...');
+
     const result = await action(null, formData); 
 
     if (!result.success) {
-      setSubmitError(result.message || 'Ocurrió un error inesperado al guardar.');
+      // Reemplazamos el setSubmitError por toast.error
+      // 'dismiss' cierra el loading, luego mostramos el error
+      toast.dismiss(toastId);
+      toast.error(result.message || 'Ocurrió un error inesperado.');
     } else {
-      // FIX: Solo llamamos a onSuccess si fue provisto
+      // Éxito
+      toast.dismiss(toastId);
+      toast.success(result.message || '¡Operación exitosa!');
+      
       if (onSuccess) onSuccess();
       setIsOpen(false);
     }
@@ -126,12 +136,7 @@ export default function ConcesionarioForm({ concesionario, onSuccess }: Concesio
             {errors.nombre && <p className="mt-1 text-sm text-red-500 flex items-center"><XCircle className="h-4 w-4 mr-1"/>{errors.nombre.message}</p>}
           </div>
 
-          {submitError && (
-            <div className="p-3 text-sm text-red-700 bg-red-100 border border-red-200 rounded-lg font-medium flex items-center">
-              <XCircle className="h-5 w-5 mr-2 flex-shrink-0" />
-              {submitError}
-            </div>
-          )}
+          {/* Hemos eliminado el bloque <div> condicional de submitError aquí */}
 
           <div className="pt-4 border-t border-gray-100 flex justify-end">
             <button
