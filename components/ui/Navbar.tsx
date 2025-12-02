@@ -22,7 +22,7 @@ export default function Navbar() {
         </Link>
 
         {/* Navegación Derecha (Enlaces y Login) */}
-        <nav className="flex items-center space-x-4">
+        {/* <nav className="flex items-center space-x-4">
           <Link 
             href="/" 
             className="text-gray-600 hover:text-primary transition duration-150 text-sm font-medium"
@@ -35,7 +35,7 @@ export default function Navbar() {
           >
             Panel Admin
           </Link>
-        </nav>
+        </nav> */}
       </div>
     </header>
   );
